@@ -24,19 +24,19 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Monitoring",
     items: [
-      { to: "/", label: "Dashboard Home", exact: true },
-      { to: "/realtime", label: "Real-Time View" },
-      { to: "/access", label: "Access Log" },
+      { to: "/", label: "Dashboard Overview", exact: true },
+      { to: "/realtime", label: "Real-Time Sensor Monitoring" },
+      { to: "/access", label: "Container Access Log" },
     ],
   },
   {
     title: "Management",
-    items: [{ to: "/alerts", label: "Alerts & Events" }],
+    items: [{ to: "/alerts", label: "Alerts & Notifications" }],
   },
   {
     title: "System",
     items: [
-      { to: "/settings", label: "Settings" },
+      { to: "/settings", label: "System Configuration" },
       { to: "/users", label: "User Management" },
     ],
   },
