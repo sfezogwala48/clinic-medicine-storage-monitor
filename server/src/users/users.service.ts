@@ -7,15 +7,19 @@ import type { UpdateUserDto } from "./user.dto.js";
 import { UserEntity } from "./user.entity.js";
 
 /**
- * Default seeded passwords (override with SEED_ADMIN_PASSWORD /
- * SEED_SUPERVISOR_PASSWORD / SEED_STAFF_PASSWORD). Documented in USAGE.md
- * and shown as hints on the dashboard login screen.
+ * Seeded passwords come from the environment (server/.env, see
+ * server/.env.example). There are no hardcoded defaults: booting without
+ * them fails fast in main.ts so demo credentials can never silently ship.
  */
-const DEFAULT_SEED_PASSWORDS: Record<string, string> = {
-  admin: process.env.SEED_ADMIN_PASSWORD || "Admin123!",
-  supervisor: process.env.SEED_SUPERVISOR_PASSWORD || "Supervisor123!",
-  staff: process.env.SEED_STAFF_PASSWORD || "Staff123!",
-};
+function seedPassword(role: string): string {
+  const value = process.env[`SEED_${role.toUpperCase()}_PASSWORD`];
+  if (!value) {
+    throw new Error(
+      `Missing SEED_${role.toUpperCase()}_PASSWORD — define it in server/.env (see server/.env.example).`,
+    );
+  }
+  return value;
+}
 
 @Injectable()
 export class UsersService {
@@ -33,7 +37,7 @@ export class UsersService {
           contact: "admin@clinic.co.za",
           status: "Active",
           lastLoginAt: null,
-          passwordHash: await hashPassword(DEFAULT_SEED_PASSWORDS.admin!),
+          passwordHash: await hashPassword(seedPassword("admin")),
         },
         {
           name: "Sr. Naidoo",
@@ -41,7 +45,7 @@ export class UsersService {
           contact: "+27721111111",
           status: "Active",
           lastLoginAt: null,
-          passwordHash: await hashPassword(DEFAULT_SEED_PASSWORDS.supervisor!),
+          passwordHash: await hashPassword(seedPassword("supervisor")),
         },
         {
           name: "Nurse Khumalo",
@@ -49,16 +53,16 @@ export class UsersService {
           contact: "+27730000000",
           status: "Active",
           lastLoginAt: null,
-          passwordHash: await hashPassword(DEFAULT_SEED_PASSWORDS.staff!),
+          passwordHash: await hashPassword(seedPassword("staff")),
         },
       ]);
     } else {
-      // Backfill: databases created before passwordHash existed get the
-      // seeded defaults so credential login works after upgrade.
+      // Backfill: databases created before passwordHash existed get passwords
+      // from the environment so credential login works after upgrade.
       const existing = await this.users.find();
       for (const u of existing) {
         if (!u.passwordHash) {
-          u.passwordHash = await hashPassword(DEFAULT_SEED_PASSWORDS[u.role] ?? "ChangeMe123!");
+          u.passwordHash = await hashPassword(seedPassword(u.role));
           await this.users.save(u);
         }
       }

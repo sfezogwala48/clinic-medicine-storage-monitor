@@ -6,6 +6,8 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
+    "bootstrap": "node bootstrap.mts",
+    "bootstrap:prod": "node bootstrap.mts --prod",
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "nest start",

@@ -7,6 +7,18 @@ import { setupApiReference } from "./docs.js";
 import { buildMqttOptions } from "./mqtt/mqtt.options.js";
 
 async function bootstrap() {
+  for (const name of [
+    "JWT_SECRET",
+    "SEED_ADMIN_PASSWORD",
+    "SEED_SUPERVISOR_PASSWORD",
+    "SEED_STAFF_PASSWORD",
+  ]) {
+    if (!process.env[name]) {
+      throw new Error(
+        `Missing ${name} — define it in server/.env (see server/.env.example) before booting.`,
+      );
+    }
+  }
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const logger = app.get(AppLogger);
   app.useLogger(logger);

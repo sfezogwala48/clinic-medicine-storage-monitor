@@ -15,6 +15,10 @@ services:
       dockerfile: server/Containerfile
     ports:
       - "${PORT:-3000}:3000"
+    # Secrets (JWT_SECRET, SEED_*_PASSWORD, …) come from server/.env;
+    # explicit environment entries below take precedence over it.
+    env_file:
+      - ./server/.env
     environment:
       PORT: "3000"
       MQTT_URL: "mqtt://mosquitto:1883"
