@@ -76,8 +76,9 @@ export class UsersService {
 
   async deleteUser(id: number): Promise<void> {
     const user = await this.getUser(id);
+    const { id: userId, name } = user;
     await this.users.remove(user);
-    await this.record("System", "User Deleted", `${user.name} (id ${user.id})`);
+    await this.record("System", "User Deleted", `${name} (id ${userId})`);
   }
 
   /** Demo role login: touches the most recent user with that role (or creates one). */
