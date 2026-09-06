@@ -29,7 +29,7 @@ export class SettingsService {
         smsEnabled: true,
         buzzerEnabled: true,
         emailEnabled: false,
-        recipients: ["+27731234567", "+27721111111"],
+        recipients: [],
         updatedAt: new Date().toISOString(),
       });
     }
