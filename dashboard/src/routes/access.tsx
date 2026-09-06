@@ -5,6 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,18 +44,18 @@ function AccessPage() {
           <label htmlFor="access-limit" className="text-sm text-muted-foreground">
             Limit
           </label>
-          <select
-            id="access-limit"
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-          >
-            {LIMITS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+            <SelectTrigger id="access-limit" className="w-[90px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIMITS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button size="sm" variant="outline" onClick={log.refresh}>
             Refresh
           </Button>

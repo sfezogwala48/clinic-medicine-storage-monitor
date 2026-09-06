@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
+    "@radix-ui/react-checkbox": "catalog:",
+    "@radix-ui/react-select": "catalog:",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-router": "latest",

@@ -8,6 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -255,18 +262,18 @@ function DashboardPage() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <select
-                  aria-label="Trend sensor"
-                  value={trendSensor}
-                  onChange={(e) => setTrendSensor(e.target.value)}
-                  className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-                >
-                  {TREND_SENSORS.map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </select>
+                <Select value={trendSensor} onValueChange={setTrendSensor}>
+                  <SelectTrigger aria-label="Trend sensor" className="w-[130px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TREND_SENSORS.map((id) => (
+                      <SelectItem key={id} value={id}>
+                        {id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <div className="flex overflow-hidden rounded-md border border-input text-sm">
                   {(["24h", "7d"] as const).map((r) => (
                     <button

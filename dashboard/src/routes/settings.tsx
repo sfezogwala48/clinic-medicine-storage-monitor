@@ -4,6 +4,7 @@ import { BellRing, Check, SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -189,42 +190,45 @@ function SettingsPage() {
               Buzzer alerts require <code>buzzerEnabled</code> + an Active actuator sharing the
               sensor&apos;s location.
             </p>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="notif-sms"
                 checked={notif.smsEnabled}
-                onChange={(e) => {
+                onCheckedChange={(c) => {
                   setSavingNotif("idle");
-                  setNotif((p) => ({ ...p, smsEnabled: e.target.checked }));
+                  setNotif((p) => ({ ...p, smsEnabled: c === true }));
                 }}
-                className="h-4 w-4 accent-primary"
               />
-              Enable SMS Alerts
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Label htmlFor="notif-sms" className="cursor-pointer text-sm font-normal">
+                Enable SMS Alerts
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="notif-buzzer"
                 checked={notif.buzzerEnabled}
-                onChange={(e) => {
+                onCheckedChange={(c) => {
                   setSavingNotif("idle");
-                  setNotif((p) => ({ ...p, buzzerEnabled: e.target.checked }));
+                  setNotif((p) => ({ ...p, buzzerEnabled: c === true }));
                 }}
-                className="h-4 w-4 accent-primary"
               />
-              Enable Local Buzzer
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Label htmlFor="notif-buzzer" className="cursor-pointer text-sm font-normal">
+                Enable Local Buzzer
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="notif-email"
                 checked={notif.emailEnabled}
-                onChange={(e) => {
+                onCheckedChange={(c) => {
                   setSavingNotif("idle");
-                  setNotif((p) => ({ ...p, emailEnabled: e.target.checked }));
+                  setNotif((p) => ({ ...p, emailEnabled: c === true }));
                 }}
-                className="h-4 w-4 accent-primary"
               />
-              Enable Email Digest
-            </label>
+              <Label htmlFor="notif-email" className="cursor-pointer text-sm font-normal">
+                Enable Email Digest
+              </Label>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="recipients">Recipients (one per line)</Label>
