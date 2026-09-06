@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Put } from "@nestjs/common";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Roles } from "../auth/roles.decorator.js";
 import { MqttPublishService } from "../mqtt/mqtt-publish.service.js";
 import { NotificationSettingsEntity } from "./notification-settings.entity.js";
 import { NotificationSettingsDto, ThresholdsDto } from "./settings.dto.js";
@@ -25,6 +26,7 @@ function notifToDto(n: NotificationSettingsEntity): NotificationSettingsDto {
 }
 
 @ApiTags("settings")
+@ApiBearerAuth()
 @Controller("api")
 export class SettingsController {
   constructor(
@@ -40,7 +42,8 @@ export class SettingsController {
   }
 
   @Put("thresholds")
-  @ApiOperation({ summary: "Replaces alert thresholds." })
+  @Roles("admin", "supervisor")
+  @ApiOperation({ summary: "Replaces alert thresholds (admin/supervisor only)." })
   @ApiResponse({ status: 200, type: ThresholdsDto })
   async saveThresholds(@Body() body: ThresholdsDto): Promise<ThresholdsDto> {
     const saved = await this.settings.saveThresholds(body);
@@ -57,7 +60,8 @@ export class SettingsController {
   }
 
   @Put("notification-settings")
-  @ApiOperation({ summary: "Replaces channel toggles and recipients." })
+  @Roles("admin", "supervisor")
+  @ApiOperation({ summary: "Replaces channel toggles and recipients (admin/supervisor only)." })
   @ApiResponse({ status: 200, type: NotificationSettingsDto })
   async saveNotif(@Body() body: NotificationSettingsDto): Promise<NotificationSettingsDto> {
     return notifToDto(await this.settings.saveNotificationSettings(body));

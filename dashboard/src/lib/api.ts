@@ -71,6 +71,17 @@ export class ApiError extends Error {
   }
 }
 
+/** Fired when the server rejects our token so the app can return to login. */
+export const UNAUTHORIZED_EVENT = "medistore:unauthorized";
+
+function handleUnauthorized(path: string) {
+  if (typeof window === "undefined") return;
+  if (path === "/api/auth/login") return;
+  setToken(null);
+  setStoredUser(null);
+  window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -81,6 +92,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ...init?.headers,
     },
   });
+  if (res.status === 401) {
+    handleUnauthorized(path);
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
     try {
@@ -177,14 +191,33 @@ export function formatTimeOnly(iso: string | null | undefined): string {
 /* Endpoint wrappers                                                    */
 /* ------------------------------------------------------------------ */
 
-export async function login(role: Role): Promise<{ token: string; user: ApiUser }> {
-  const data = await apiFetch<{ token: string; user: ApiUser }>("/api/auth/login", {
+export interface LoginResponse {
+  token: string;
+  user: ApiUser;
+}
+
+/** Standard credential login: contact (email/phone) or display name + password. */
+export async function login(identifier: string, password: string): Promise<LoginResponse> {
+  const data = await apiFetch<LoginResponse>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({ identifier: identifier.trim(), password }),
   });
   setToken(data.token);
   setStoredUser(data.user);
   return data;
+}
+
+export async function getMe(): Promise<ApiUser> {
+  const user = await apiFetch<ApiUser>("/api/auth/me");
+  setStoredUser(user);
+  return user;
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await apiFetch("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
@@ -451,27 +484,62 @@ export async function getUsers(): Promise<AppUser[]> {
   return (list as Record<string, unknown>[]).map(normalizeUser);
 }
 
-export async function createUser(name: string, contact?: string): Promise<AppUser> {
+export interface CreateUserInput {
+  name: string;
+  contact?: string;
+  role?: Role;
+  password?: string;
+}
+
+export async function createUser(
+  name: string,
+  contact?: string,
+  opts?: { role?: Role; password?: string },
+): Promise<AppUser & { temporaryPassword?: string }>;
+export async function createUser(
+  input: CreateUserInput,
+): Promise<AppUser & { temporaryPassword?: string }>;
+export async function createUser(
+  nameOrInput: string | CreateUserInput,
+  contact?: string,
+  opts?: { role?: Role; password?: string },
+): Promise<AppUser & { temporaryPassword?: string }> {
+  const body =
+    typeof nameOrInput === "string"
+      ? { name: nameOrInput, contact, role: opts?.role ?? "staff", password: opts?.password }
+      : {
+          name: nameOrInput.name,
+          contact: nameOrInput.contact,
+          role: nameOrInput.role ?? "staff",
+          password: nameOrInput.password,
+        };
+  const displayName = typeof nameOrInput === "string" ? nameOrInput : nameOrInput.name;
   const raw = await apiFetch<Record<string, unknown>>("/api/users", {
     method: "POST",
-    body: JSON.stringify({ name, contact, role: "staff" }),
+    body: JSON.stringify(body),
   });
   if (!raw || Object.keys(raw).length === 0) {
     return {
       id: 0,
-      name,
+      name: displayName,
       role: "staff",
       contact: contact || "-",
       lastLogin: "Never",
       status: "Active",
     };
   }
-  return normalizeUser(raw);
+  return { ...normalizeUser(raw), temporaryPassword: raw.temporaryPassword as string | undefined };
 }
 
 export async function updateUser(
   id: number,
-  patch: { name?: string; role?: Role; contact?: string; status?: AppUser["status"] },
+  patch: {
+    name?: string;
+    role?: Role;
+    contact?: string;
+    status?: AppUser["status"];
+    password?: string;
+  },
 ): Promise<AppUser> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/users/${encodeURIComponent(id)}`, {
     method: "PATCH",

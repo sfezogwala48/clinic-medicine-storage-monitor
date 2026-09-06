@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsOptional, IsString } from "class-validator";
+import { IsIn, IsOptional, IsString, MinLength } from "class-validator";
 
 export class UserDto {
   @ApiProperty({ example: 1 }) id!: number;
@@ -24,6 +24,15 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   contact?: string;
+
+  @ApiPropertyOptional({
+    description: "Initial password (min 8 chars). Omitted → server generates a temporary one.",
+    example: "Staff123!",
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  password?: string;
 }
 
 export class UpdateUserDto {
@@ -46,13 +55,27 @@ export class UpdateUserDto {
   @IsOptional()
   @IsIn(["Active", "Disabled"])
   status?: string;
+
+  @ApiPropertyOptional({ description: "Admin reset: replaces the password.", minLength: 8 })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  password?: string;
 }
 
-export class LoginDto {
+/**
+ * @deprecated Role-only login was the insecure demo path. Use
+ * POST /api/auth/login {identifier, password} instead. Kept in the schema
+ * only so old clients get a clear 400 pointing at the new endpoint.
+ */
+export class LegacyRoleLoginDto {
   @ApiProperty({ enum: ["admin", "supervisor", "staff"] })
   @IsIn(["admin", "supervisor", "staff"])
   role!: string;
 }
+
+/** Back-compat alias: old clients POSTed {role}. */
+export const LoginDto = LegacyRoleLoginDto;
 
 export class AuditDto {
   @ApiProperty({ example: "2026-06-02 09:45:20" }) timestamp!: string;

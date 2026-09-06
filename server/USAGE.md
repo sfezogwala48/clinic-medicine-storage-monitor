@@ -12,7 +12,7 @@ How to talk to the Clinic Medicine Storage Monitor server — over **MQTT** (IoT
 | OpenAPI JSON     | `GET /openapi.json`                             |
 | Interactive docs | `GET /reference` (Scalar UI)                    |
 
-No real auth yet: `POST /api/auth/login` with `{"role": "admin"|"supervisor"|"staff"}` returns a demo token (`demo-<role>-<id>`). Pass it as `Authorization: Bearer <token>` if your client requires it — the server currently accepts requests without enforcing it.
+Auth is credential-based (JWT): `POST /api/auth/login` with `{"identifier": "<contact-or-name>", "password": "..."}` returns `{token, user}`. Pass it as `Authorization: Bearer <token>` on every `/api/*` request — unauthenticated calls get `401`. Tokens expire after `JWT_EXPIRES_IN` (default `12h`); signing secret is `JWT_SECRET`. Seeded demo accounts (override with `SEED_<ROLE>_PASSWORD` before first boot): `admin@clinic.co.za` / `Admin123!`, `+27721111111` (supervisor) / `Supervisor123!`, `+27730000000` (staff) / `Staff123!`. Public without a token: `/health*`, `/openapi.json`, `/reference`, `/telemetry/*` (devices), and `POST /api/auth/login`.
 
 ---
 
@@ -106,7 +106,9 @@ All responses are JSON. Timestamps are **ISO-8601** — format them in the UI (`
 
 | Method         | Path                                               | Notes                                                                                                                                                      |
 | -------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`         | `/api/auth/login`                                  | Body `{"role":"admin"}` → `{token, user}`                                                                                                                  |
+| `POST`         | `/api/auth/login`                                  | Body `{"identifier":"admin@clinic.co.za","password":"..."}` → `{token, user}` (JWT, `12h`)                                                                 |
+| `GET`          | `/api/auth/me`                                     | Current user from the Bearer token                                                                                                                         |
+| `POST`         | `/api/auth/change-password`                        | Body `{"currentPassword":"...","newPassword":"..."}` (min 8 chars)                                                                                         |
 | `GET`          | `/api/dashboard/summary`                           | Avg temp/humidity, alert counts, `systemStatus`, `lastSync`                                                                                                |
 | `GET`          | `/api/temperature-trend?sensorId=SEN001&range=24h` | `range`: `24h` or `7d` → `{unit:"°C", intervalMinutes, limit, points[]}`                                                                                   |
 | `GET`          | `/api/sensors`                                     | Optional `?type=Temp/Humidity` `&status=Active`                                                                                                            |
@@ -120,7 +122,7 @@ All responses are JSON. Timestamps are **ISO-8601** — format them in the UI (`
 | `GET`          | `/api/reports/:name`                               | File download                                                                                                                                              |
 | `GET` / `PUT`  | `/api/thresholds`                                  | `{fridgeMin, fridgeMax, roomMax, doorOpenLimitMin}`                                                                                                        |
 | `GET` / `PUT`  | `/api/notification-settings`                       | `{smsEnabled, buzzerEnabled, emailEnabled, recipients[]}`                                                                                                  |
-| `GET` / `POST` | `/api/users`                                       | Create defaults to `staff` role                                                                                                                            |
+| `GET` / `POST` | `/api/users`                                       | Create (admin only) defaults to `staff`; optional `password`, else a `temporaryPassword` is returned once                                                  |
 | `GET`          | `/api/audit-trail?limit=100`                       | Newest first                                                                                                                                               |
 
 Legacy simulator endpoints (kept for testing): `GET /telemetry/latest`, `POST /telemetry/publish` (publishes via MQTT and waits for the ingest ack — needs a reachable broker).
@@ -130,14 +132,15 @@ Legacy simulator endpoints (kept for testing): `GET /telemetry/latest`, `POST /t
 ```bash
 BASE=http://localhost:3000
 
-curl -s -X POST $BASE/api/auth/login -H 'Content-Type: application/json' -d '{"role":"admin"}'
-curl -s $BASE/api/dashboard/summary
-curl -s "$BASE/api/temperature-trend?sensorId=SEN001&range=24h"
-curl -s "$BASE/api/alerts?status=Active"
-curl -s -X PATCH $BASE/api/alerts/ALT001/acknowledge
-curl -s -X PUT $BASE/api/thresholds -H 'Content-Type: application/json' \
+TOKEN=$(curl -s -X POST $BASE/api/auth/login -H 'Content-Type: application/json' -d '{"identifier":"admin@clinic.co.za","password":"Admin123!"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+AUTH="Authorization: Bearer $TOKEN"
+curl -s $BASE/api/dashboard/summary -H "$AUTH"
+curl -s "$BASE/api/temperature-trend?sensorId=SEN001&range=24h" -H "$AUTH"
+curl -s "$BASE/api/alerts?status=Active" -H "$AUTH"
+curl -s -X PATCH $BASE/api/alerts/ALT001/acknowledge -H "$AUTH"
+curl -s -X PUT $BASE/api/thresholds -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"fridgeMin":2,"fridgeMax":8,"roomMax":25,"doorOpenLimitMin":5}'
-curl -s -X POST $BASE/api/users -H 'Content-Type: application/json' -d '{"name":"Nurse Khumalo"}'
+curl -s -X POST $BASE/api/users -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"Nurse Khumalo","password":"Nurse123!"}'
 ```
 
 Errors are standard Nest shapes: `400` validation, `404` unknown alert/report, `503` MQTT ack timeout on `/telemetry/publish`.

@@ -1,14 +1,14 @@
 import * as React from "react";
 import { Outlet, createRootRoute, useLocation } from "@tanstack/react-router";
 import {
-  ClipboardCheck,
+  Eye,
+  EyeOff,
   HeartPulse,
+  LockKeyhole,
   LogOut,
   Menu,
   Moon,
   Pencil,
-  ShieldCheck,
-  Stethoscope,
   Sun,
 } from "lucide-react";
 
@@ -18,7 +18,7 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import "../styles.css";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { MainNav, NAV_SECTIONS } from "@/components/navigation/main-nav";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RouterDialog } from "@/components/ui/router-dialog";
@@ -27,7 +27,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { Role } from "@/lib/types";
 import {
   API_BASE,
+  UNAUTHORIZED_EVENT,
+  changePassword as apiChangePassword,
   checkBackend,
+  getMe,
   getStoredUser,
   getToken,
   login as apiLogin,
@@ -41,8 +44,6 @@ import { cn } from "@/lib/utils";
 export const Route = createRootRoute({
   component: RootComponent,
 });
-
-const ROLE_STORAGE_KEY = "medistore-role";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard Overview",
@@ -108,40 +109,30 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => Promise<void> }) {
-  const roles: { value: Role; label: string; hint: string; icon: React.ReactNode }[] = [
-    {
-      value: "admin",
-      label: "Admin",
-      hint: "Full access to all modules",
-      icon: <ShieldCheck className="h-5 w-5" />,
-    },
-    {
-      value: "supervisor",
-      label: "Supervisor",
-      hint: "Alerts & oversight",
-      icon: <ClipboardCheck className="h-5 w-5" />,
-    },
-    {
-      value: "staff",
-      label: "Staff",
-      hint: "Daily operations",
-      icon: <Stethoscope className="h-5 w-5" />,
-    },
-  ];
-
-  const [pending, setPending] = React.useState<Role | null>(null);
+function LoginScreen({
+  onLogin,
+}: {
+  onLogin: (identifier: string, password: string) => Promise<void>;
+}) {
+  const [identifier, setIdentifier] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const handleClick = async (role: Role) => {
-    setPending(role);
+  const canSubmit = identifier.trim() !== "" && password !== "" && !pending;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setPending(true);
     setError(null);
     try {
-      await onLogin(role);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Login failed");
+      await onLogin(identifier.trim(), password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
-      setPending(null);
+      setPending(false);
     }
   };
 
@@ -159,35 +150,61 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => Promise<void> }) {
           <CardTitle className="text-xl tracking-tight">MediStore Monitor</CardTitle>
           <CardDescription>Dr Ajibola&apos;s Clinic &mdash; sign in to continue</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 pt-4">
-          {roles.map((role) => (
+        <CardContent className="pt-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login-identifier">Contact or username</Label>
+              <Input
+                id="login-identifier"
+                autoComplete="username"
+                autoFocus
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="e.g. admin@clinic.co.za"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login-password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            {error && (
+              <p
+                role="alert"
+                className="rounded-md bg-red-500/10 px-3 py-2 text-center text-xs text-red-700 dark:text-red-300"
+              >
+                {error}
+              </p>
+            )}
             <button
-              key={role.value}
-              type="button"
-              disabled={pending !== null}
-              onClick={() => handleClick(role.value)}
-              className="group flex w-full items-center gap-3 rounded-lg border border-input bg-background px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent disabled:opacity-60"
+              type="submit"
+              className={buttonVariants({ className: "w-full" })}
+              disabled={!canSubmit}
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                {role.icon}
-              </span>
-              <span>
-                <span className="block text-sm font-semibold">
-                  {role.label}
-                  {pending === role.value ? " — signing in…" : ""}
-                </span>
-                <span className="block text-xs text-muted-foreground">{role.hint}</span>
-              </span>
+              <LockKeyhole className="h-4 w-4" />
+              {pending ? "Signing in…" : "Sign in"}
             </button>
-          ))}
-          {error && (
-            <p className="rounded-md bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-700 dark:text-amber-300">
-              Server login failed ({error}) — continuing with demo role.
-            </p>
-          )}
-          <p className="pt-2 text-center text-[11px] text-muted-foreground">
-            POST /api/auth/login with {'{"role": "..."}'} returns a demo token; the server also
-            accepts requests without enforcing it.
+          </form>
+          <p className="pt-4 text-center text-[11px] text-muted-foreground">
+            Seeded demo accounts: admin@clinic.co.za, +27721111111 (supervisor), +27730000000
+            (staff). Ask your admin for credentials.
           </p>
         </CardContent>
       </Card>
@@ -202,6 +219,11 @@ function ProfileBlock({ role }: { role: Role }) {
   const [contact, setContact] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [pwSaving, setPwSaving] = React.useState(false);
+  const [pwError, setPwError] = React.useState<string | null>(null);
+  const [pwDone, setPwDone] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -210,6 +232,10 @@ function ProfileBlock({ role }: { role: Role }) {
       setName(s?.name ?? ROLE_NAMES[role]);
       setContact(s?.contact ?? "");
       setError(null);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPwError(null);
+      setPwDone(false);
     }
   }, [open, role]);
 
@@ -271,7 +297,7 @@ function ProfileBlock({ role }: { role: Role }) {
           {error && <p className="text-sm text-red-600">{error}</p>}
           {!Number.isFinite(userId) && (
             <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-              Offline demo session — profile syncs once you sign in with the backend up.
+              Session expired — please sign in again.
             </p>
           )}
           <div className="space-y-2">
@@ -297,6 +323,48 @@ function ProfileBlock({ role }: { role: Role }) {
             <Button onClick={save} disabled={saving || !canSave}>
               {saving ? "Saving…" : "Save Profile"}
             </Button>
+          </div>
+          <div className="space-y-2 border-t pt-4">
+            <Label>Change password</Label>
+            {pwError && <p className="text-sm text-red-600">{pwError}</p>}
+            {pwDone && <p className="text-sm text-emerald-600">Password changed.</p>}
+            <Input
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Current password"
+            />
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password (min 8 characters)"
+            />
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                disabled={pwSaving || currentPassword === "" || newPassword.length < 8}
+                onClick={async () => {
+                  setPwSaving(true);
+                  setPwError(null);
+                  setPwDone(false);
+                  try {
+                    await apiChangePassword(currentPassword, newPassword);
+                    setCurrentPassword("");
+                    setNewPassword("");
+                    setPwDone(true);
+                  } catch (e) {
+                    setPwError(e instanceof Error ? e.message : "Password change failed");
+                  } finally {
+                    setPwSaving(false);
+                  }
+                }}
+              >
+                {pwSaving ? "Changing…" : "Change Password"}
+              </Button>
+            </div>
           </div>
         </div>
       </RouterDialog>
@@ -378,7 +446,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
             <span
               title={
                 backendUp === false
-                  ? `Backend unreachable at ${API_BASE} — showing cached demo data`
+                  ? `Backend unreachable at ${API_BASE} — sign-in and live data unavailable`
                   : `Backend: ${API_BASE}`
               }
               className="hidden items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium md:inline-flex"
@@ -394,7 +462,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
                   )}
                 />
               </span>
-              {backendUp === null ? "Checking…" : backendUp ? "Live" : "Demo cache"}
+              {backendUp === null ? "Checking…" : backendUp ? "Live" : "Offline"}
             </span>
             <span className="hidden text-sm text-muted-foreground lg:inline">{today}</span>
             <ThemeToggle />
@@ -418,43 +486,47 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
 }
 
 function RootComponent() {
-  const [role, setRole] = React.useState<Role | null>(() => {
-    if (typeof window === "undefined") return null;
-    const saved = window.localStorage.getItem(ROLE_STORAGE_KEY);
-    return saved === "admin" || saved === "supervisor" || saved === "staff" ? saved : null;
-  });
+  const [user, setUser] = React.useState<ApiUser | null>(() => getStoredUser());
+  const [validating, setValidating] = React.useState(() => getToken() !== null);
+  const role: Role | null = user?.role ?? null;
 
-  const handleLogin = async (next: Role) => {
-    window.localStorage.setItem(ROLE_STORAGE_KEY, next);
-    try {
-      // USAGE.md: POST /api/auth/login {role} → {token, user}; server also
-      // accepts unauthenticated requests, so fall back to demo mode offline.
-      await apiLogin(next);
-    } catch {
-      setToken(`demo-${next}-local`);
-      setStoredUser({ role: next });
-    }
-    setRole(next);
+  const handleLogin = async (identifier: string, password: string) => {
+    const { user: loggedIn } = await apiLogin(identifier, password);
+    setUser(loggedIn);
   };
 
-  const handleLogout = () => {
-    window.localStorage.removeItem(ROLE_STORAGE_KEY);
+  const handleLogout = React.useCallback(() => {
     setToken(null);
     setStoredUser(null);
-    setRole(null);
-  };
+    setUser(null);
+  }, []);
 
-  // Keep demo sessions working across restarts even without a stored role.
+  // Validate any persisted session against the server on boot.
   React.useEffect(() => {
-    if (!role && getToken()) {
-      const saved = window.localStorage.getItem(ROLE_STORAGE_KEY);
-      if (saved === "admin" || saved === "supervisor" || saved === "staff") setRole(saved);
+    if (!getToken()) {
+      setValidating(false);
+      return;
     }
-  }, [role]);
+    getMe()
+      .then((me) => setUser(me))
+      .catch(() => handleLogout())
+      .finally(() => setValidating(false));
+  }, [handleLogout]);
+
+  // The API layer clears the token on 401 — drop back to the login screen.
+  React.useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
 
   return (
     <ThemeProvider>
-      {role ? (
+      {validating ? (
+        <div className="flex min-h-svh items-center justify-center bg-muted/60">
+          <p className="text-sm text-muted-foreground">Restoring session…</p>
+        </div>
+      ) : role ? (
         <AppShell role={role} onLogout={handleLogout} />
       ) : (
         <LoginScreen onLogin={handleLogin} />

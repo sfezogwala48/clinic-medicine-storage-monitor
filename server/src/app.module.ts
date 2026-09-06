@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AccessModule } from "./access/access.module.js";
+import { AuthModule } from "./auth/auth.module.js";
 import { AlertsModule } from "./alerts/alerts.module.js";
 import { CoreModule } from "./core/core.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
@@ -24,6 +25,7 @@ import { UsersModule } from "./users/users.module.js";
     }),
     CoreModule,
     DatabaseModule,
+    AuthModule,
     MqttModule,
     HealthModule,
     TelemetryModule,

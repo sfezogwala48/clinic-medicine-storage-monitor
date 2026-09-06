@@ -24,7 +24,8 @@ export function setupApiReference(app: INestApplication) {
     .addTag("dashboard", "Dashboard aggregates")
     .addTag("settings", "Thresholds and notification settings")
     .addTag("users", "System users and audit trail")
-    .addTag("auth", "Demo role login")
+    .addTag("auth", "Credential login (JWT)")
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
 

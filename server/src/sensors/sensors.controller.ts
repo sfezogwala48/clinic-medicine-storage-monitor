@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Roles } from "../auth/roles.decorator.js";
 import {
   CreateSensorDto,
   SensorDto,
@@ -19,6 +20,7 @@ function toDto(s: {
 }
 
 @ApiTags("sensors")
+@ApiBearerAuth()
 @Controller("api/sensors")
 export class SensorsController {
   constructor(private readonly sensors: SensorsService) {}
@@ -31,7 +33,8 @@ export class SensorsController {
   }
 
   @Post()
-  @ApiOperation({ summary: "Registers a sensor in the fleet registry." })
+  @Roles("admin", "supervisor")
+  @ApiOperation({ summary: "Registers a sensor in the fleet registry (admin/supervisor only)." })
   @ApiResponse({ status: 201, type: SensorDto })
   @ApiResponse({ status: 409, description: "Sensor id already registered." })
   async create(@Body() body: CreateSensorDto): Promise<SensorDto> {
@@ -47,7 +50,8 @@ export class SensorsController {
   }
 
   @Patch(":id")
-  @ApiOperation({ summary: "Updates sensor metadata (location, model, status, container)." })
+  @Roles("admin", "supervisor")
+  @ApiOperation({ summary: "Updates sensor metadata (admin/supervisor only)." })
   @ApiResponse({ status: 200, type: SensorDto })
   @ApiResponse({ status: 404, description: "Sensor not found." })
   async update(@Param("id") id: string, @Body() body: UpdateSensorDto): Promise<SensorDto> {
@@ -55,8 +59,11 @@ export class SensorsController {
   }
 
   @Delete(":id")
+  @Roles("admin", "supervisor")
   @HttpCode(204)
-  @ApiOperation({ summary: "Decommissions a sensor. Historical readings are kept." })
+  @ApiOperation({
+    summary: "Decommissions a sensor (admin/supervisor only). Historical readings are kept.",
+  })
   @ApiResponse({ status: 204, description: "Deleted." })
   @ApiResponse({ status: 404, description: "Sensor not found." })
   async remove(@Param("id") id: string): Promise<void> {

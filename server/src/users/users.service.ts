@@ -1,9 +1,21 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { generateTemporaryPassword, hashPassword } from "../auth/password.util.js";
 import { AuditEntity } from "./audit.entity.js";
 import type { UpdateUserDto } from "./user.dto.js";
 import { UserEntity } from "./user.entity.js";
+
+/**
+ * Default seeded passwords (override with SEED_ADMIN_PASSWORD /
+ * SEED_SUPERVISOR_PASSWORD / SEED_STAFF_PASSWORD). Documented in USAGE.md
+ * and shown as hints on the dashboard login screen.
+ */
+const DEFAULT_SEED_PASSWORDS: Record<string, string> = {
+  admin: process.env.SEED_ADMIN_PASSWORD || "Admin123!",
+  supervisor: process.env.SEED_SUPERVISOR_PASSWORD || "Supervisor123!",
+  staff: process.env.SEED_STAFF_PASSWORD || "Staff123!",
+};
 
 @Injectable()
 export class UsersService {
@@ -21,6 +33,7 @@ export class UsersService {
           contact: "admin@clinic.co.za",
           status: "Active",
           lastLoginAt: null,
+          passwordHash: await hashPassword(DEFAULT_SEED_PASSWORDS.admin!),
         },
         {
           name: "Sr. Naidoo",
@@ -28,6 +41,7 @@ export class UsersService {
           contact: "+27721111111",
           status: "Active",
           lastLoginAt: null,
+          passwordHash: await hashPassword(DEFAULT_SEED_PASSWORDS.supervisor!),
         },
         {
           name: "Nurse Khumalo",
@@ -35,8 +49,19 @@ export class UsersService {
           contact: "+27730000000",
           status: "Active",
           lastLoginAt: null,
+          passwordHash: await hashPassword(DEFAULT_SEED_PASSWORDS.staff!),
         },
       ]);
+    } else {
+      // Backfill: databases created before passwordHash existed get the
+      // seeded defaults so credential login works after upgrade.
+      const existing = await this.users.find();
+      for (const u of existing) {
+        if (!u.passwordHash) {
+          u.passwordHash = await hashPassword(DEFAULT_SEED_PASSWORDS[u.role] ?? "ChangeMe123!");
+          await this.users.save(u);
+        }
+      }
     }
   }
 
@@ -44,16 +69,23 @@ export class UsersService {
     return this.users.find({ order: { id: "ASC" } });
   }
 
-  async createUser(input: { name: string; role?: string; contact?: string }): Promise<UserEntity> {
+  async createUser(input: {
+    name: string;
+    role?: string;
+    contact?: string;
+    password?: string;
+  }): Promise<{ user: UserEntity; temporaryPassword?: string }> {
+    const password = input.password ?? generateTemporaryPassword();
     const user = await this.users.save({
       name: input.name,
       role: (input.role ?? "staff") as UserEntity["role"],
       contact: input.contact ?? null,
       status: "Active",
       lastLoginAt: null,
+      passwordHash: await hashPassword(password),
     });
     await this.record("System", "User Created", `${user.name} (${user.role})`);
-    return user;
+    return input.password ? { user } : { user, temporaryPassword: password };
   }
 
   async getUser(id: number): Promise<UserEntity> {
@@ -69,6 +101,9 @@ export class UsersService {
     if (patch.role !== undefined) user.role = patch.role as UserEntity["role"];
     if (patch.contact !== undefined) user.contact = patch.contact;
     if (patch.status !== undefined) user.status = patch.status;
+    if (patch.password !== undefined) {
+      user.passwordHash = await hashPassword(patch.password);
+    }
     const saved = await this.users.save(user);
     await this.record("System", "User Updated", `${saved.name} (id ${saved.id})`);
     return saved;
@@ -76,25 +111,8 @@ export class UsersService {
 
   async deleteUser(id: number): Promise<void> {
     const user = await this.getUser(id);
-    const { id: userId, name } = user;
     await this.users.remove(user);
-    await this.record("System", "User Deleted", `${name} (id ${userId})`);
-  }
-
-  /** Demo role login: touches the most recent user with that role (or creates one). */
-  async loginAs(role: UserEntity["role"]): Promise<UserEntity> {
-    let user = await this.users.findOne({ where: { role }, order: { id: "ASC" } });
-    user ??= await this.users.save({
-      name: `${role[0]?.toUpperCase()}${role.slice(1)} User`,
-      role,
-      contact: null,
-      status: "Active",
-      lastLoginAt: null,
-    });
-    user.lastLoginAt = new Date().toISOString();
-    await this.users.save(user);
-    await this.record(user.name, "Login", `Role login as ${role}`);
-    return user;
+    await this.record("System", "User Deleted", `${user.name} (id ${user.id})`);
   }
 
   record(user: string, action: string, details: string): Promise<AuditEntity> {

@@ -20,6 +20,9 @@ export class UserEntity {
   @Column({ type: "varchar", default: "Active" })
   status!: string;
 
+  @Column({ type: "varchar", nullable: true })
+  passwordHash!: string | null;
+
   @Column({ type: "datetime", nullable: true })
   lastLoginAt!: string | null;
 }

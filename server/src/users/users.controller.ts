@@ -10,9 +10,10 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Roles } from "../auth/roles.decorator.js";
 import { AuditEntity } from "./audit.entity.js";
-import { AuditDto, CreateUserDto, LoginDto, UpdateUserDto, UserDto } from "./user.dto.js";
+import { AuditDto, CreateUserDto, UpdateUserDto, UserDto } from "./user.dto.js";
 import { UserEntity } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
@@ -36,20 +37,8 @@ function toAuditDto(a: AuditEntity): AuditDto {
   };
 }
 
-@ApiTags("auth")
-@Controller("api/auth")
-export class AuthController {
-  constructor(private readonly users: UsersService) {}
-
-  @Post("login")
-  @ApiOperation({ summary: "Demo role login; returns a token and the user profile." })
-  async login(@Body() body: LoginDto): Promise<{ token: string; user: UserDto }> {
-    const user = await this.users.loginAs(body.role as UserEntity["role"]);
-    return { token: `demo-${user.role}-${user.id}`, user: toUserDto(user) };
-  }
-}
-
 @ApiTags("users")
+@ApiBearerAuth()
 @Controller("api")
 export class UsersController {
   constructor(private readonly users: UsersService) {}
@@ -62,10 +51,12 @@ export class UsersController {
   }
 
   @Post("users")
-  @ApiOperation({ summary: "Creates a user (defaults to staff role)." })
-  @ApiResponse({ status: 201, type: UserDto })
-  async create(@Body() body: CreateUserDto): Promise<UserDto> {
-    return toUserDto(await this.users.createUser(body));
+  @Roles("admin")
+  @ApiOperation({ summary: "Creates a user (admin only; defaults to staff role)." })
+  @ApiResponse({ status: 201, description: "Created user (+ temporaryPassword when generated)." })
+  async create(@Body() body: CreateUserDto) {
+    const { user, temporaryPassword } = await this.users.createUser(body);
+    return { ...toUserDto(user), ...(temporaryPassword ? { temporaryPassword } : {}) };
   }
 
   @Get("users/:id")
@@ -77,7 +68,8 @@ export class UsersController {
   }
 
   @Patch("users/:id")
-  @ApiOperation({ summary: "Partially updates a system user." })
+  @Roles("admin")
+  @ApiOperation({ summary: "Partially updates a system user (admin only)." })
   @ApiResponse({ status: 200, type: UserDto })
   @ApiResponse({ status: 404, description: "User not found." })
   async update(
@@ -88,8 +80,9 @@ export class UsersController {
   }
 
   @Delete("users/:id")
+  @Roles("admin")
   @HttpCode(204)
-  @ApiOperation({ summary: "Deletes a system user." })
+  @ApiOperation({ summary: "Deletes a system user (admin only)." })
   @ApiResponse({ status: 204, description: "Deleted." })
   @ApiResponse({ status: 404, description: "User not found." })
   async remove(@Param("id", ParseIntPipe) id: number): Promise<void> {
