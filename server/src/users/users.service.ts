@@ -1,7 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuditEntity } from "./audit.entity.js";
+import type { UpdateUserDto } from "./user.dto.js";
 import { UserEntity } from "./user.entity.js";
 
 @Injectable()
@@ -53,6 +54,30 @@ export class UsersService {
     });
     await this.record("System", "User Created", `${user.name} (${user.role})`);
     return user;
+  }
+
+  async getUser(id: number): Promise<UserEntity> {
+    const user = await this.users.findOne({ where: { id } });
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    return user;
+  }
+
+  async updateUser(id: number, patch: UpdateUserDto): Promise<UserEntity> {
+    const user = await this.getUser(id);
+    if (patch.name !== undefined) user.name = patch.name;
+    // Values are validated by UpdateUserDto (IsIn) before reaching here.
+    if (patch.role !== undefined) user.role = patch.role as UserEntity["role"];
+    if (patch.contact !== undefined) user.contact = patch.contact;
+    if (patch.status !== undefined) user.status = patch.status;
+    const saved = await this.users.save(user);
+    await this.record("System", "User Updated", `${saved.name} (id ${saved.id})`);
+    return saved;
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    const user = await this.getUser(id);
+    await this.users.remove(user);
+    await this.record("System", "User Deleted", `${user.name} (id ${user.id})`);
   }
 
   /** Demo role login: touches the most recent user with that role (or creates one). */

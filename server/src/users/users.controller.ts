@@ -1,12 +1,24 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuditEntity } from "./audit.entity.js";
-import { AuditDto, CreateUserDto, LoginDto, UserDto } from "./user.dto.js";
+import { AuditDto, CreateUserDto, LoginDto, UpdateUserDto, UserDto } from "./user.dto.js";
 import { UserEntity } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
 function toUserDto(u: UserEntity): UserDto {
   return {
+    id: u.id,
     name: u.name,
     role: u.role,
     contact: u.contact ?? "",
@@ -54,6 +66,34 @@ export class UsersController {
   @ApiResponse({ status: 201, type: UserDto })
   async create(@Body() body: CreateUserDto): Promise<UserDto> {
     return toUserDto(await this.users.createUser(body));
+  }
+
+  @Get("users/:id")
+  @ApiOperation({ summary: "Single system user by id." })
+  @ApiResponse({ status: 200, type: UserDto })
+  @ApiResponse({ status: 404, description: "User not found." })
+  async getOne(@Param("id", ParseIntPipe) id: number): Promise<UserDto> {
+    return toUserDto(await this.users.getUser(id));
+  }
+
+  @Patch("users/:id")
+  @ApiOperation({ summary: "Partially updates a system user." })
+  @ApiResponse({ status: 200, type: UserDto })
+  @ApiResponse({ status: 404, description: "User not found." })
+  async update(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateUserDto,
+  ): Promise<UserDto> {
+    return toUserDto(await this.users.updateUser(id, body));
+  }
+
+  @Delete("users/:id")
+  @HttpCode(204)
+  @ApiOperation({ summary: "Deletes a system user." })
+  @ApiResponse({ status: 204, description: "Deleted." })
+  @ApiResponse({ status: 404, description: "User not found." })
+  async remove(@Param("id", ParseIntPipe) id: number): Promise<void> {
+    await this.users.deleteUser(id);
   }
 
   @Get("audit-trail")

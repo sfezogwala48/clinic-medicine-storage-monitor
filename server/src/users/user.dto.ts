@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsIn, IsOptional, IsString } from "class-validator";
 
 export class UserDto {
+  @ApiProperty({ example: 1 }) id!: number;
   @ApiProperty({ example: "Dr. Ajibola" }) name!: string;
   @ApiProperty({ enum: ["admin", "supervisor", "staff"] }) role!: string;
   @ApiProperty({ example: "admin@clinic.co.za" }) contact!: string;
@@ -23,6 +24,28 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   contact?: string;
+}
+
+export class UpdateUserDto {
+  @ApiPropertyOptional({ example: "Nurse Khumalo" })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ enum: ["admin", "supervisor", "staff"] })
+  @IsOptional()
+  @IsIn(["admin", "supervisor", "staff"])
+  role?: string;
+
+  @ApiPropertyOptional({ example: "+27730000000" })
+  @IsOptional()
+  @IsString()
+  contact?: string;
+
+  @ApiPropertyOptional({ enum: ["Active", "Disabled"] })
+  @IsOptional()
+  @IsIn(["Active", "Disabled"])
+  status?: string;
 }
 
 export class LoginDto {
