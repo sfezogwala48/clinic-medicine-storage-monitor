@@ -1,3 +1,4 @@
+import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import { AppModule } from "./app.module.js";
@@ -9,6 +10,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const logger = app.get(AppLogger);
   app.useLogger(logger);
+
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }),
+  );
 
   setupApiReference(app);
 

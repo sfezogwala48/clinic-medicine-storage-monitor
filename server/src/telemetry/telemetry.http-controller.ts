@@ -3,16 +3,14 @@ import {
   Body,
   Controller,
   Get,
-  Inject,
   NotFoundException,
   Param,
   Post,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { ClientProxy } from "@nestjs/microservices";
 import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { lastValueFrom, timeout } from "rxjs";
-import { TELEMETRY_CLIENT, telemetryTopic } from "../mqtt/mqtt.options.js";
+import { telemetryTopic } from "../mqtt/mqtt.options.js";
+import { MqttPublishService } from "../mqtt/mqtt-publish.service.js";
 import { safeCallAsync } from "../core/result/result.js";
 import { PublishAckDto, PublishReadingDto, ReadingDto } from "./dto.js";
 import { parseReading } from "./reading.js";
@@ -25,7 +23,7 @@ const PUBLISH_ACK_TIMEOUT_MS = 5000;
 export class TelemetryHttpController {
   constructor(
     private readonly telemetry: TelemetryService,
-    @Inject(TELEMETRY_CLIENT) private readonly client: ClientProxy,
+    private readonly mqtt: MqttPublishService,
   ) {}
 
   @Get("latest")
@@ -65,11 +63,7 @@ export class TelemetryHttpController {
     }
     const reading = parsed.value;
     const ack = await safeCallAsync(() =>
-      lastValueFrom(
-        this.client
-          .send(telemetryTopic(reading.deviceId), reading)
-          .pipe(timeout(PUBLISH_ACK_TIMEOUT_MS)),
-      ),
+      this.mqtt.request(telemetryTopic(reading.deviceId), reading, PUBLISH_ACK_TIMEOUT_MS),
     );
     return ack.match(
       (response) => ({ published: true, ack: response }),

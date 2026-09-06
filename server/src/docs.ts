@@ -16,6 +16,16 @@ export function setupApiReference(app: INestApplication) {
     .setVersion("1.0")
     .addTag("health", "Liveness and readiness probes")
     .addTag("telemetry", "Storage device readings")
+    .addTag("sensors", "Sensor registry")
+    .addTag("readings", "Latest readings and temperature trend")
+    .addTag("alerts", "Threshold violations")
+    .addTag("access", "Container access events")
+    .addTag("notifications", "SMS and buzzer dispatch log")
+    .addTag("dashboard", "Dashboard aggregates")
+    .addTag("reports", "Compliance reports")
+    .addTag("settings", "Thresholds and notification settings")
+    .addTag("users", "System users and audit trail")
+    .addTag("auth", "Demo role login")
     .build();
   const document = SwaggerModule.createDocument(app, config);
 
