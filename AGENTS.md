@@ -69,6 +69,6 @@ Vite+ monorepo with three workspaces (see `pnpm-workspace.yaml`):
   (build with Vite+, serve via `nginx-unprivileged:alpine`). Build contexts are the repo root.
 - `compose.yaml` brings up `mosquitto` + `server` + `dashboard`: `podman compose up -d --build`.
   Needs the podman API socket: `systemctl --user start podman.socket`.
-- API: `http://localhost:3000` (`/health`), UI: `http://localhost:10080` (`DASHBOARD_PORT` to override), MQTT: `localhost:1883`.
+- API: `http://localhost:3000` (`/health`), UI: `http://localhost:9100` (`DASHBOARD_PORT` to override), MQTT: `localhost:1883`.
 - `VITE_API_BASE_URL` is baked into the dashboard image at build time (build arg, defaults to
   `http://localhost:3000`); SQLite persists in the `server-data` volume.
