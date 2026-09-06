@@ -62,3 +62,13 @@ Vite+ monorepo with three workspaces (see `pnpm-workspace.yaml`):
 - One lockfile (`pnpm-lock.yaml`) and one dependency catalog (`pnpm-workspace.yaml`) at the root. Use `catalog:` for shared deps (`vite`, `vite-plus`, `typescript`, `@types/node`).
 - Shared tooling lives at the root: `vite.config.ts` (fmt/lint/run cache), `.vite-hooks/` (pre-commit dispatcher), `.github/`, `.vscode/`. Do not add per-package copies.
 - `server/oxlint.json` holds server-specific lint overrides; keep package-level overrides next to the package that needs them.
+
+## Containers (podman compose)
+
+- `server/Containerfile` (multi-stage, `node:24-alpine` runtime) and `dashboard/Containerfile`
+  (build with Vite+, serve via `nginx-unprivileged:alpine`). Build contexts are the repo root.
+- `compose.yaml` brings up `mosquitto` + `server` + `dashboard`: `podman compose up -d --build`.
+  Needs the podman API socket: `systemctl --user start podman.socket`.
+- API: `http://localhost:3000` (`/health`), UI: `http://localhost:8080`, MQTT: `localhost:1883`.
+- `VITE_API_BASE_URL` is baked into the dashboard image at build time (build arg, defaults to
+  `http://localhost:3000`); SQLite persists in the `server-data` volume.

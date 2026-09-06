@@ -1,0 +1,58 @@
+name: clinic-medicine-storage-monitor
+
+services:
+  mosquitto:
+    image: docker.io/eclipse-mosquitto:2
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Containerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      MQTT_URL: "mqtt://mosquitto:1883"
+      MQTT_CLIENT_ID: "clinic-monitor-server"
+      DATABASE_PATH: "/app/data/app.sqlite"
+      DB_SYNCHRONIZE: "${DB_SYNCHRONIZE:-true}"
+      DB_LOGGING: "${DB_LOGGING:-false}"
+      LOG_LEVEL: "${LOG_LEVEL:-log}"
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+    volumes:
+      - server-data:/app/data
+    depends_on:
+      - mosquitto
+    healthcheck:
+      test: ["CMD", "node", "/app/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Containerfile
+      args:
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:3000}"
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    depends_on:
+      - server
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  server-data: {}

@@ -1,0 +1,13 @@
+# Keep build contexts small: everything is installed/compiled inside the build.
+node_modules
+dist
+.git
+data
+*.sqlite
+*.sqlite-*
+*.db
+.env
+.env.local
+.tanstack
+coverage
+.nyc_output
