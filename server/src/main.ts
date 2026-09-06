@@ -23,6 +23,25 @@ async function bootstrap() {
   app.connectMicroservice(buildMqttOptions(config), { inheritAppConfig: true });
   await app.startAllMicroservices();
 
+  // CORS for browser clients (dashboard). CORS_ORIGINS is a comma-separated
+  // allowlist; empty reflects the request origin (dev default), "*" allows all.
+  const corsRaw = (config.get<string>("CORS_ORIGINS", "") ?? "").trim();
+  const corsOrigin =
+    corsRaw === ""
+      ? true
+      : corsRaw === "*"
+        ? "*"
+        : corsRaw
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean);
+  app.enableCors({
+    origin: corsOrigin,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 86400,
+  });
+
   app.enableShutdownHooks();
 
   const port = Number(config.get<string>("PORT", "3000"));

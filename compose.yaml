@@ -24,6 +24,7 @@ services:
       DB_LOGGING: "${DB_LOGGING:-false}"
       LOG_LEVEL: "${LOG_LEVEL:-log}"
       LOG_FORMAT: "${LOG_FORMAT:-json}"
+      CORS_ORIGINS: "http://localhost:${DASHBOARD_PORT:-9100}"
     volumes:
       - server-data:/app/data
     depends_on:
