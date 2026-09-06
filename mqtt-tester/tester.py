@@ -181,6 +181,7 @@ def build_parser():
     p.add_argument("--temp", type=float, default=4.2)
     p.add_argument("--humidity", type=float, default=42.0)
     p.add_argument("--loop", action="store_true")
+    p.add_argument("--interval", type=float, default=argparse.SUPPRESS)
     p.set_defaults(func=cmd_storage)
 
     p = sub.add_parser("climate", help="publish a climate reading")
@@ -188,6 +189,7 @@ def build_parser():
     p.add_argument("--temp", type=float, default=4.2)
     p.add_argument("--humidity", type=float, default=42.0)
     p.add_argument("--loop", action="store_true")
+    p.add_argument("--interval", type=float, default=argparse.SUPPRESS)
     p.set_defaults(func=cmd_climate)
 
     p = sub.add_parser("door", help="publish a door event")
@@ -213,6 +215,7 @@ def build_parser():
     p.add_argument("--temp", type=float, default=4.2)
     p.add_argument("--humidity", type=float, default=42.0)
     p.add_argument("--count", type=int, default=0, help="messages per topic, 0 = forever")
+    p.add_argument("--interval", type=float, default=argparse.SUPPRESS)
     p.set_defaults(func=cmd_burst)
 
     return parser
