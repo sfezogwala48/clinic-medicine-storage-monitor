@@ -1,0 +1,32 @@
+packages:
+  - server
+  - dashboard
+  - mqtt-tester
+
+catalogMode: prefer
+
+catalog:
+  "@types/node": ^24
+  typescript: ^6.0.2
+  vite: npm:@voidzero-dev/vite-plus-core@0.3.0
+  vite-plus: 0.3.0
+  vitest: 4.1.11
+  "@vitest/coverage-v8": 4.1.11
+
+overrides:
+  vite@*: "catalog:"
+  vitest@*: "catalog:"
+
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest
+  allowedVersions:
+    vite: "*"
+    vitest: "*"
+
+allowBuilds:
+  "@scarf/scarf": false
+  better-sqlite3: true
+  esbuild: true
+  lightningcss: true

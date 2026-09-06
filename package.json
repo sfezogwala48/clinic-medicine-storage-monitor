@@ -1,0 +1,32 @@
+{
+  "name": "clinic-medicine-storage-monitor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Clinic medicine storage monitor — Vite+ monorepo (server + dashboard + mqtt-tester)",
+  "type": "module",
+  "scripts": {
+    "dev": "vp run --parallel server#dev dashboard#dev",
+    "dev:server": "vp run server#dev",
+    "dev:dashboard": "vp run dashboard#dev",
+    "build": "vp run -r build",
+    "test": "vp run -r test",
+    "check": "vp check",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "ready": "vp check && vp run -r test && vp run -r build"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.4",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
