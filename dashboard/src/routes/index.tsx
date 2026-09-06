@@ -2,19 +2,26 @@ import * as React from "react";
 import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Droplets, Thermometer, TriangleAlert, Wifi } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
   FALLBACK,
   formatTime,
+  formatTimeOnly,
   getAccessLog,
   getDashboardSummary,
   getTemperatureTrend,
   useApiQuery,
-  type TrendResponse,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -68,121 +75,77 @@ function StatCard({
   );
 }
 
-const CHART_W = 600;
-const CHART_H = 220;
-const PAD = { top: 16, right: 12, bottom: 28, left: 36 };
 const THRESHOLD = 25;
 
-function TempTrendChart({ trend, fallback }: { trend: TrendResponse | null; fallback: number[] }) {
-  const values = trend && trend.points.length > 0 ? trend.points.map((p) => p.temp) : fallback;
-  const min = Math.min(...values, THRESHOLD - 2);
-  const max = Math.max(...values, THRESHOLD + 2);
-  const span = Math.max(max - min, 1);
-  const innerW = CHART_W - PAD.left - PAD.right;
-  const innerH = CHART_H - PAD.top - PAD.bottom;
-  const x = (i: number) => PAD.left + (i / Math.max(values.length - 1, 1)) * innerW;
-  const y = (v: number) => PAD.top + (1 - (v - min) / span) * innerH;
+const trendChartConfig = {
+  temp: {
+    label: "Temperature",
+    color: "var(--chart-1)",
+  },
+} satisfies ChartConfig;
 
-  const line = values
-    .map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`)
-    .join(" ");
-  const area = `${line} L${x(values.length - 1).toFixed(1)},${(PAD.top + innerH).toFixed(1)} L${PAD.left},${(PAD.top + innerH).toFixed(1)} Z`;
-  const ticks = [min, (min + max) / 2, max].map((t) => Math.round(t * 10) / 10);
+interface TrendDatum {
+  label: string;
+  temp: number;
+}
 
+function TempTrendChart({ data }: { data: TrendDatum[] }) {
   return (
-    <svg
-      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-      className="h-56 w-full"
-      role="img"
-      aria-label="Temperature trend"
-    >
-      <defs>
-        <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-
-      {ticks.map((t) => (
-        <g key={t}>
-          <line
-            x1={PAD.left}
-            x2={CHART_W - PAD.right}
-            y1={y(t)}
-            y2={y(t)}
-            stroke="var(--color-border)"
-            strokeDasharray="3 4"
-          />
-          <text
-            x={PAD.left - 8}
-            y={y(t) + 4}
-            textAnchor="end"
-            fontSize="11"
-            fill="var(--color-muted-foreground)"
-          >
-            {t}°
-          </text>
-        </g>
-      ))}
-
-      <line
-        x1={PAD.left}
-        x2={CHART_W - PAD.right}
-        y1={y(THRESHOLD)}
-        y2={y(THRESHOLD)}
-        stroke="var(--color-destructive)"
-        strokeDasharray="6 4"
-        strokeWidth="1.5"
-      />
-      <text
-        x={CHART_W - PAD.right}
-        y={y(THRESHOLD) - 6}
-        textAnchor="end"
-        fontSize="11"
-        fontWeight="600"
-        fill="var(--color-destructive)"
-      >
-        Limit {THRESHOLD}°
-      </text>
-
-      <path d={area} fill="url(#tempFill)" />
-      <path
-        d={line}
-        fill="none"
-        stroke="var(--color-primary)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {values.map((v, i) => (
-        <g key={i}>
-          <circle
-            cx={x(i)}
-            cy={y(v)}
-            r={v >= THRESHOLD ? 4.5 : 3.5}
-            fill={v >= THRESHOLD ? "var(--color-destructive)" : "var(--color-primary)"}
-            stroke="var(--color-card)"
-            strokeWidth="2"
-          >
-            <title>{`${v}°C${trend?.points[i]?.time ? ` @ ${trend.points[i].time}` : ""}`}</title>
-          </circle>
-          {(i % 2 === 0 || v >= THRESHOLD) && (
-            <text
-              x={x(i)}
-              y={CHART_H - 8}
-              textAnchor="middle"
-              fontSize="11"
-              fill="var(--color-muted-foreground)"
-            >
-              {trend?.points[i]?.time
-                ? formatTime(trend.points[i].time).slice(-8, -3) || trend.points[i].time
-                : `${String(i * 2).padStart(2, "0")}:00`}
-            </text>
-          )}
-        </g>
-      ))}
-    </svg>
+    <ChartContainer config={trendChartConfig} className="min-h-[220px] w-full">
+      <AreaChart accessibilityLayer data={data} margin={{ left: 0, right: 8 }}>
+        <defs>
+          <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-temp)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--color-temp)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} />
+        <YAxis
+          width={40}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(v: number) => `${v}°`}
+          domain={[
+            (dataMin: number) => Math.floor(dataMin - 1),
+            (dataMax: number) => Math.ceil(dataMax + 1),
+          ]}
+        />
+        <ChartTooltip
+          cursor={false}
+          content={
+            <ChartTooltipContent
+              indicator="line"
+              formatter={(value) => {
+                const num = typeof value === "number" ? value : Number(value);
+                return Number.isFinite(num) ? `${num}°C` : "";
+              }}
+            />
+          }
+        />
+        <ReferenceLine
+          y={THRESHOLD}
+          stroke="var(--color-destructive)"
+          strokeDasharray="6 4"
+          label={{
+            value: `Limit ${THRESHOLD}°`,
+            position: "insideTopRight",
+            fill: "var(--color-destructive)",
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        />
+        <Area
+          dataKey="temp"
+          type="monotone"
+          stroke="var(--color-temp)"
+          strokeWidth={2.5}
+          fill="url(#tempFill)"
+          dot={{ r: 3, strokeWidth: 2 }}
+          activeDot={{ r: 5 }}
+        />
+      </AreaChart>
+    </ChartContainer>
   );
 }
 
@@ -220,6 +183,15 @@ function DashboardPage() {
   });
 
   const s = summary.data;
+  const livePoints = trend.live ? trend.data.points : [];
+  const chartData: TrendDatum[] = (
+    livePoints.length > 0 ? livePoints : FALLBACK.trendValues.map((temp) => ({ time: "", temp }))
+  ).map((p, i) => ({
+    label: p.time
+      ? formatTimeOnly(p.time).slice(0, 5)
+      : `${String((i * 2) % 24).padStart(2, "0")}:00`,
+    temp: p.temp,
+  }));
   const online =
     s.systemStatus.toLowerCase().includes("on") ||
     s.systemStatus.toLowerCase().includes("ok") ||
@@ -317,10 +289,7 @@ function DashboardPage() {
             {trend.loading && trend.data.points.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">Loading trend…</p>
             ) : (
-              <TempTrendChart
-                trend={trend.live ? trend.data : null}
-                fallback={FALLBACK.trendValues}
-              />
+              <TempTrendChart data={chartData} />
             )}
           </CardContent>
         </Card>

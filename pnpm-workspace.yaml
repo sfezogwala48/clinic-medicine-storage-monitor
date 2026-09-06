@@ -12,6 +12,7 @@ catalog:
   vite-plus: 0.3.0
   vitest: 4.1.11
   "@vitest/coverage-v8": 4.1.11
+  recharts: 2.15.4
 
 overrides:
   vite@*: "catalog:"
