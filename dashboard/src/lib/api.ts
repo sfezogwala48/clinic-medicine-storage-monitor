@@ -254,6 +254,42 @@ export async function getSensors(type?: string, status?: string): Promise<Sensor
   return (list as Record<string, unknown>[]).map(normalizeSensor);
 }
 
+export interface CreateSensorInput {
+  id: string;
+  type: string;
+  location: string;
+  model: string;
+  status?: string;
+  container?: string;
+}
+
+export interface UpdateSensorInput {
+  location?: string;
+  model?: string;
+  status?: string;
+  container?: string;
+}
+
+export async function createSensor(input: CreateSensorInput): Promise<Sensor> {
+  const raw = await apiFetch<Record<string, unknown>>("/api/sensors", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return normalizeSensor(raw);
+}
+
+export async function updateSensor(id: string, patch: UpdateSensorInput): Promise<Sensor> {
+  const raw = await apiFetch<Record<string, unknown>>(`/api/sensors/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return normalizeSensor(raw);
+}
+
+export async function deleteSensor(id: string): Promise<void> {
+  await apiFetch(`/api/sensors/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 function normalizeReading(raw: Record<string, unknown>): SensorReading {
   return {
     sensorId: str(raw.sensorId ?? raw.sensor_id ?? raw.id, ""),
