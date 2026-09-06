@@ -42,7 +42,6 @@ const PAGE_TITLES: Record<string, string> = {
   "/realtime": "Real-Time Sensor Monitoring",
   "/access": "Container Access Log",
   "/alerts": "Alerts & Notifications",
-  "/reports": "Reports & Analytics",
   "/settings": "System Configuration",
   "/users": "User Management",
 };
@@ -113,7 +112,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => Promise<void> }) {
     {
       value: "supervisor",
       label: "Supervisor",
-      hint: "Alerts, reports & oversight",
+      hint: "Alerts & oversight",
       icon: <ClipboardCheck className="h-5 w-5" />,
     },
     {

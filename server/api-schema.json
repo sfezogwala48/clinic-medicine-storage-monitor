@@ -1,413 +1,983 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://clinic.local/schemas/medistore-monitor-api-1.0.0.json",
-  "title": "MediStore Monitor API Schema",
-  "description": "Data contract for the MediStore clinic medicine storage monitor UI. Entity shapes mirror src/data/clinic.ts field-for-field so endpoints can replace the mock data with minimal UI changes. Display strings (times, durations, last-login labels) are kept as the UI renders them today; see apiNotes for recommended API representations.",
-  "version": "1.0.0",
-  "baseUrl": "/api",
-  "sourceOfTruth": "src/data/clinic.ts",
-  "apiNotes": [
-    "Time fields (Alert.time, AccessEvent.time) are HH:MM:SS display strings in the UI. A real API should return ISO 8601 timestamps and let the UI format them.",
-    "AccessEvent.duration is a display string ('5m', '-'). Consider returning open/close timestamp pairs instead.",
-    "AppUser.lastLogin is a display string ('Today, 08:00'). Consider returning an ISO timestamp or null (never logged in).",
-    "SensorReading carries either climate fields (temp/humidity) or door fields (containerOpen) depending on Sensor.type."
-  ],
-  "$defs": {
-    "Role": {
-      "type": "string",
-      "enum": ["admin", "supervisor", "staff"],
-      "description": "Workspace role selected at login. Drives nav visibility and permissions."
-    },
-    "Sensor": {
-      "type": "object",
-      "required": ["id", "type", "location", "model", "status"],
-      "properties": {
-        "id": { "type": "string", "description": "Sensor identifier.", "example": "SEN001" },
-        "type": {
-          "type": "string",
-          "enum": ["Temp/Humidity", "Magnetic Door"],
-          "description": "Climate sensors report temp/humidity; door sensors report open/closed."
-        },
-        "location": { "type": "string", "example": "Medicine Storage Room A" },
-        "model": { "type": "string", "example": "SHT31" },
-        "status": { "type": "string", "enum": ["Active", "Inactive"] }
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "HealthController_liveness",
+        "parameters": [],
+        "responses": { "200": { "description": "Process is up" } },
+        "summary": "Liveness probe (no dependency checks)",
+        "tags": ["health"]
       }
     },
-    "SensorReading": {
-      "type": "object",
-      "required": ["sensorId", "status", "alerts"],
-      "properties": {
-        "sensorId": { "type": "string", "example": "SEN001" },
-        "temp": {
-          "type": "number",
-          "description": "Degrees Celsius. Climate sensors only.",
-          "example": 25.1
-        },
-        "humidity": {
-          "type": "number",
-          "description": "Relative humidity %. Climate sensors only.",
-          "example": 49.0
-        },
-        "containerOpen": {
-          "type": "boolean",
-          "description": "Door sensors only.",
-          "example": false
-        },
-        "status": { "type": "string", "enum": ["Normal", "Warning", "Critical"] },
-        "alerts": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Active alert count for this sensor."
-        }
-      }
-    },
-    "AlertSeverity": {
-      "type": "string",
-      "enum": ["Critical", "High", "Medium"]
-    },
-    "AlertStatus": {
-      "type": "string",
-      "enum": ["Active", "Resolved"]
-    },
-    "Alert": {
-      "type": "object",
-      "required": ["id", "sensorId", "type", "value", "time", "severity", "status"],
-      "properties": {
-        "id": { "type": "string", "example": "ALT001" },
-        "sensorId": { "type": "string", "example": "SEN001" },
-        "type": { "type": "string", "example": "High Temperature" },
-        "value": {
-          "type": "string",
-          "description": "Display value that triggered the alert.",
-          "example": "25.1°C"
-        },
-        "time": { "type": "string", "pattern": "^\\d{2}:\\d{2}(:\\d{2})?$", "example": "08:15:00" },
-        "severity": { "$ref": "#/$defs/AlertSeverity" },
-        "status": { "$ref": "#/$defs/AlertStatus" }
-      }
-    },
-    "AccessEvent": {
-      "type": "object",
-      "required": ["id", "sensorId", "container", "open", "time", "duration", "reason"],
-      "properties": {
-        "id": { "type": "string", "example": "CST002" },
-        "sensorId": { "type": "string", "example": "SEN005" },
-        "container": { "type": "string", "example": "Medicine Cabinet A" },
-        "open": {
-          "type": "boolean",
-          "description": "True for open events, false for close events."
-        },
-        "time": { "type": "string", "pattern": "^\\d{2}:\\d{2}(:\\d{2})?$", "example": "08:15:30" },
-        "duration": {
-          "type": "string",
-          "description": "How long the container stayed open ('-' for close events).",
-          "example": "5m"
-        },
-        "reason": { "type": "string", "example": "Staff access" }
-      }
-    },
-    "Notification": {
-      "type": "object",
-      "required": ["id", "alertId", "type", "recipient", "message"],
-      "properties": {
-        "id": { "type": "string", "example": "NOT007" },
-        "alertId": {
-          "type": "string",
-          "description": "Alert that triggered this notification.",
-          "example": "ALT006"
-        },
-        "type": { "type": "string", "enum": ["SMS", "Buzzer"] },
-        "recipient": { "type": "string", "example": "+27731234567" },
-        "message": {
-          "type": "string",
-          "example": "ALERT: Vaccine Container unauthorized access detected"
-        }
-      }
-    },
-    "TemperatureSeries": {
-      "type": "object",
-      "required": ["sensorId", "unit", "intervalMinutes", "limit", "points"],
-      "properties": {
-        "sensorId": { "type": "string", "example": "SEN001" },
-        "unit": { "type": "string", "const": "°C" },
-        "intervalMinutes": {
-          "type": "integer",
-          "description": "Spacing between points.",
-          "example": 120
-        },
-        "limit": {
-          "type": "number",
-          "description": "Threshold drawn as the limit line.",
-          "example": 25
-        },
-        "points": {
-          "type": "array",
-          "items": { "type": "number" },
-          "example": [22, 23, 22, 24, 25, 25.1, 24, 23, 22, 22, 23, 24]
-        }
-      }
-    },
-    "DashboardSummary": {
-      "type": "object",
-      "required": [
-        "avgTemperature",
-        "avgHumidity",
-        "humidityRange",
-        "activeAlerts",
-        "criticalCount",
-        "highCount",
-        "systemStatus",
-        "lastSync"
-      ],
-      "properties": {
-        "avgTemperature": { "type": "number", "example": 22.5 },
-        "avgHumidity": { "type": "number", "example": 45.2 },
-        "humidityRange": {
-          "type": "object",
-          "required": ["min", "max"],
-          "properties": {
-            "min": { "type": "number", "example": 30 },
-            "max": { "type": "number", "example": 60 }
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_readiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful\n\nAll dependencies healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["ok", "degraded"], "example": "ok" },
+                    "info": {
+                      "type": "object",
+                      "example": { "database": { "status": "up", "responseTime": 12 } },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": { "type": "string", "enum": ["up", "degraded", "down"] },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": { "type": "string", "enum": ["up", "degraded", "down"] },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": { "database": { "status": "up", "responseTime": 12 } },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": { "type": "string", "enum": ["up", "degraded", "down"] },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful\n\nOne or more dependencies unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["error", "shutting_down"],
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": { "database": { "status": "up", "responseTime": 12 } },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": { "type": "string", "enum": ["up", "degraded", "down"] },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect",
+                          "responseTime": 3005
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": { "type": "string", "enum": ["up", "degraded", "down"] },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": { "status": "up", "responseTime": 12 },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect",
+                          "responseTime": 3005
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": { "type": "string", "enum": ["up", "degraded", "down"] },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
-        "activeAlerts": { "type": "integer", "example": 2 },
-        "criticalCount": { "type": "integer", "example": 1 },
-        "highCount": { "type": "integer", "example": 1 },
-        "systemStatus": { "type": "string", "enum": ["Online", "Offline", "Degraded"] },
-        "lastSync": { "type": "string", "description": "Display string.", "example": "Just now" }
+        "summary": "Readiness probe (sqlite, MQTT, disk, memory)",
+        "tags": ["health"]
       }
     },
-    "Thresholds": {
-      "type": "object",
-      "required": ["fridgeMin", "fridgeMax", "roomMax", "doorOpenLimitMin"],
-      "properties": {
-        "fridgeMin": { "type": "number", "description": "Fridge min temp (°C).", "example": 2 },
-        "fridgeMax": { "type": "number", "description": "Fridge max temp (°C).", "example": 8 },
-        "roomMax": { "type": "number", "description": "Room max temp (°C).", "example": 25 },
-        "doorOpenLimitMin": {
-          "type": "number",
-          "description": "Door open limit (minutes).",
-          "example": 5
-        }
-      }
-    },
-    "NotificationSettings": {
-      "type": "object",
-      "required": ["smsEnabled", "buzzerEnabled", "emailEnabled", "recipients"],
-      "properties": {
-        "smsEnabled": { "type": "boolean", "example": true },
-        "buzzerEnabled": { "type": "boolean", "example": true },
-        "emailEnabled": { "type": "boolean", "example": false },
-        "recipients": {
-          "type": "array",
-          "items": { "type": "string" },
-          "example": ["+27731234567", "+27721111111"]
-        }
-      }
-    },
-    "AppUser": {
-      "type": "object",
-      "required": ["name", "role", "contact", "lastLogin", "status"],
-      "properties": {
-        "name": { "type": "string", "example": "Dr. Ajibola" },
-        "role": { "$ref": "#/$defs/Role" },
-        "contact": { "type": "string", "example": "admin@clinic.co.za" },
-        "lastLogin": {
-          "type": "string",
-          "description": "Display string.",
-          "example": "Today, 08:00"
+    "/telemetry/latest": {
+      "get": {
+        "operationId": "TelemetryHttpController_getLatest",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Latest readings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ReadingDto" }
+                }
+              }
+            }
+          }
         },
-        "status": { "type": "string", "enum": ["Active", "Disabled"] }
+        "summary": "Latest reading per storage device (in-memory)",
+        "tags": ["telemetry"]
       }
     },
-    "CreateUserRequest": {
-      "type": "object",
-      "required": ["name"],
-      "properties": {
-        "name": { "type": "string", "example": "Nurse Khumalo" },
-        "role": { "$ref": "#/$defs/Role", "default": "staff" },
-        "contact": { "type": "string", "example": "+27730000000" }
+    "/telemetry/latest/{deviceId}": {
+      "get": {
+        "operationId": "TelemetryHttpController_getLatestById",
+        "parameters": [
+          {
+            "name": "deviceId",
+            "required": true,
+            "in": "path",
+            "schema": { "example": "fridge-01", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest reading",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReadingDto" } }
+            }
+          },
+          "404": { "description": "No readings for this device yet" }
+        },
+        "summary": "Latest reading for one storage device",
+        "tags": ["telemetry"]
       }
     },
-    "AuditEntry": {
-      "type": "object",
-      "required": ["timestamp", "user", "action", "details"],
-      "properties": {
-        "timestamp": { "type": "string", "example": "2026-06-02 09:45:20" },
-        "user": { "type": "string", "example": "System" },
-        "action": { "type": "string", "example": "Alert Triggered" },
-        "details": { "type": "string", "example": "Unauthorized Access SEN006" }
+    "/telemetry/publish": {
+      "post": {
+        "operationId": "TelemetryHttpController_publish",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/PublishReadingDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Published and acknowledged",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PublishAckDto" } }
+            }
+          },
+          "400": { "description": "Reading failed validation" },
+          "503": { "description": "No MQTT acknowledgement (broker unreachable?)" }
+        },
+        "summary": "Publish a reading via MQTT and wait for the ingest acknowledgement",
+        "tags": ["telemetry"]
       }
     },
-    "ReportSummary": {
-      "type": "object",
-      "required": ["complianceScore", "complianceTarget", "totalAccessEvents", "wastePrevented"],
-      "properties": {
-        "complianceScore": { "type": "number", "example": 98 },
-        "complianceTarget": { "type": "number", "example": 95 },
-        "totalAccessEvents": { "type": "integer", "example": 42 },
-        "wastePrevented": { "type": "string", "example": "R 12,500" }
+    "/api/sensors": {
+      "get": {
+        "operationId": "SensorsController_list",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": { "type": "string", "enum": ["Temp/Humidity", "Magnetic Door"] }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": { "type": "string", "enum": ["Active", "Inactive"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/SensorDto" } }
+              }
+            }
+          }
+        },
+        "summary": "All sensors for the real-time view",
+        "tags": ["sensors"]
+      },
+      "post": {
+        "operationId": "SensorsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateSensorDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SensorDto" } }
+            }
+          },
+          "409": { "description": "Sensor id already registered." }
+        },
+        "summary": "Registers a sensor in the fleet registry.",
+        "tags": ["sensors"]
       }
     },
-    "ReportFile": {
-      "type": "object",
-      "required": ["name", "size", "downloadUrl"],
-      "properties": {
-        "name": { "type": "string", "example": "Daily_Report_2026-06-01.pdf" },
-        "size": { "type": "string", "description": "Display string.", "example": "2.4 MB" },
-        "downloadUrl": { "type": "string", "example": "/api/reports/Daily_Report_2026-06-01.pdf" }
+    "/api/sensors/{id}": {
+      "get": {
+        "operationId": "SensorsController_getOne",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SensorDto" } }
+            }
+          },
+          "404": { "description": "Sensor not found." }
+        },
+        "summary": "Single sensor by id.",
+        "tags": ["sensors"]
+      },
+      "patch": {
+        "operationId": "SensorsController_update",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSensorDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SensorDto" } }
+            }
+          },
+          "404": { "description": "Sensor not found." }
+        },
+        "summary": "Updates sensor metadata (location, model, status, container).",
+        "tags": ["sensors"]
+      },
+      "delete": {
+        "operationId": "SensorsController_remove",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "404": { "description": "Sensor not found." }
+        },
+        "summary": "Decommissions a sensor. Historical readings are kept.",
+        "tags": ["sensors"]
       }
     },
-    "LoginRequest": {
-      "type": "object",
-      "required": ["role"],
-      "properties": {
-        "role": { "$ref": "#/$defs/Role" }
+    "/api/thresholds": {
+      "get": {
+        "operationId": "SettingsController_getThresholds",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ThresholdsDto" } }
+            }
+          }
+        },
+        "summary": "Current alert thresholds.",
+        "tags": ["settings"]
+      },
+      "put": {
+        "operationId": "SettingsController_saveThresholds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ThresholdsDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ThresholdsDto" } }
+            }
+          }
+        },
+        "summary": "Replaces alert thresholds.",
+        "tags": ["settings"]
       }
     },
-    "LoginResponse": {
-      "type": "object",
-      "required": ["token", "user"],
-      "properties": {
-        "token": { "type": "string", "description": "Bearer token for subsequent requests." },
-        "user": { "$ref": "#/$defs/AppUser" }
+    "/api/notification-settings": {
+      "get": {
+        "operationId": "SettingsController_getNotif",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NotificationSettingsDto" }
+              }
+            }
+          }
+        },
+        "summary": "Channel toggles and recipients.",
+        "tags": ["settings"]
+      },
+      "put": {
+        "operationId": "SettingsController_saveNotif",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NotificationSettingsDto" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NotificationSettingsDto" }
+              }
+            }
+          }
+        },
+        "summary": "Replaces channel toggles and recipients.",
+        "tags": ["settings"]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LoginDto" } }
+          }
+        },
+        "responses": { "201": { "description": "" } },
+        "summary": "Demo role login; returns a token and the user profile.",
+        "tags": ["auth"]
+      }
+    },
+    "/api/users": {
+      "get": {
+        "operationId": "UsersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/UserDto" } }
+              }
+            }
+          }
+        },
+        "summary": "System users table.",
+        "tags": ["users"]
+      },
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          }
+        },
+        "summary": "Creates a user (defaults to staff role).",
+        "tags": ["users"]
+      }
+    },
+    "/api/users/{id}": {
+      "get": {
+        "operationId": "UsersController_getOne",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "number" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          },
+          "404": { "description": "User not found." }
+        },
+        "summary": "Single system user by id.",
+        "tags": ["users"]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "number" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateUserDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          },
+          "404": { "description": "User not found." }
+        },
+        "summary": "Partially updates a system user.",
+        "tags": ["users"]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "number" } }
+        ],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "404": { "description": "User not found." }
+        },
+        "summary": "Deletes a system user.",
+        "tags": ["users"]
+      }
+    },
+    "/api/audit-trail": {
+      "get": {
+        "operationId": "UsersController_audit",
+        "parameters": [
+          { "name": "limit", "required": true, "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AuditDto" } }
+              }
+            }
+          }
+        },
+        "summary": "Audit trail table.",
+        "tags": ["users"]
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "NotificationsController_list",
+        "parameters": [
+          {
+            "name": "alertId",
+            "required": false,
+            "in": "query",
+            "schema": { "example": "ALT006", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/NotificationDto" }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Notification log. Supports ?alertId=.",
+        "tags": ["notifications"]
+      }
+    },
+    "/api/alerts": {
+      "get": {
+        "operationId": "AlertsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": { "type": "string", "enum": ["Active", "Resolved"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AlertDto" } }
+              }
+            }
+          }
+        },
+        "summary": "Alerts list. Supports ?status=Active.",
+        "tags": ["alerts"]
+      }
+    },
+    "/api/alerts/{id}/acknowledge": {
+      "patch": {
+        "operationId": "AlertsController_acknowledge",
+        "parameters": [
+          { "name": "id", "required": true, "in": "path", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/AlertDto" } }
+            }
+          }
+        },
+        "summary": "Marks an alert Resolved; stops further notifications.",
+        "tags": ["alerts"]
+      }
+    },
+    "/api/access-log": {
+      "get": {
+        "operationId": "AccessController_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": { "example": 3, "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AccessEventDto" }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Container access events, newest first. Supports ?limit=.",
+        "tags": ["access"]
+      }
+    },
+    "/api/readings": {
+      "get": {
+        "operationId": "ReadingsController_latest",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/SensorReadingDto" }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Latest reading per sensor",
+        "tags": ["readings"]
+      }
+    },
+    "/api/temperature-trend": {
+      "get": {
+        "operationId": "ReadingsController_trend",
+        "parameters": [
+          {
+            "name": "sensorId",
+            "required": true,
+            "in": "query",
+            "schema": { "example": "SEN001", "type": "string" }
+          },
+          {
+            "name": "range",
+            "required": false,
+            "in": "query",
+            "schema": { "example": "24h", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TemperatureSeriesDto" }
+              }
+            }
+          }
+        },
+        "summary": "24h temperature series for the trend chart",
+        "tags": ["readings"]
+      }
+    },
+    "/api/dashboard/summary": {
+      "get": {
+        "operationId": "DashboardController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DashboardSummaryDto" }
+              }
+            }
+          }
+        },
+        "summary": "Stat cards for the dashboard overview.",
+        "tags": ["dashboard"]
       }
     }
   },
-  "endpoints": [
-    {
-      "method": "POST",
-      "path": "/api/auth/login",
-      "summary": "Demo role login; returns a token and the user profile.",
-      "usedBy": "src/routes/__root.tsx (LoginScreen)",
-      "request": { "$ref": "#/$defs/LoginRequest" },
-      "response": { "$ref": "#/$defs/LoginResponse" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/dashboard/summary",
-      "summary": "Stat cards for the dashboard overview.",
-      "usedBy": "src/routes/index.tsx",
-      "response": { "$ref": "#/$defs/DashboardSummary" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/temperature-trend",
-      "summary": "24h temperature series for the trend chart.",
-      "usedBy": "src/routes/index.tsx (TempTrendChart)",
-      "query": { "sensorId": "SEN001", "range": "24h" },
-      "response": { "$ref": "#/$defs/TemperatureSeries" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/sensors",
-      "summary": "All sensors for the real-time view.",
-      "usedBy": "src/routes/realtime.tsx",
-      "response": { "type": "array", "items": { "$ref": "#/$defs/Sensor" } }
-    },
-    {
-      "method": "GET",
-      "path": "/api/readings",
-      "summary": "Latest reading per sensor.",
-      "usedBy": "src/routes/realtime.tsx (readingFor)",
-      "response": { "type": "array", "items": { "$ref": "#/$defs/SensorReading" } }
-    },
-    {
-      "method": "GET",
-      "path": "/api/access-log",
-      "summary": "Container access events, newest first. Supports ?limit= for the dashboard widget.",
-      "usedBy": "src/routes/access.tsx, src/routes/index.tsx",
-      "query": { "limit": 3 },
-      "response": { "type": "array", "items": { "$ref": "#/$defs/AccessEvent" } }
-    },
-    {
-      "method": "GET",
-      "path": "/api/alerts",
-      "summary": "Alerts list. Supports ?status=Active.",
-      "usedBy": "src/routes/alerts.tsx",
-      "query": { "status": "Active" },
-      "response": { "type": "array", "items": { "$ref": "#/$defs/Alert" } }
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/alerts/:id/acknowledge",
-      "summary": "Marks an alert Resolved; stops further notifications.",
-      "usedBy": "src/routes/alerts.tsx (acknowledge)",
-      "response": { "$ref": "#/$defs/Alert" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/notifications",
-      "summary": "Notification log. Supports ?alertId=.",
-      "usedBy": "src/routes/alerts.tsx",
-      "query": { "alertId": "ALT006" },
-      "response": { "type": "array", "items": { "$ref": "#/$defs/Notification" } }
-    },
-    {
-      "method": "GET",
-      "path": "/api/reports/summary",
-      "summary": "Compliance score, access totals, waste prevented.",
-      "usedBy": "src/routes/reports.tsx",
-      "response": { "$ref": "#/$defs/ReportSummary" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/reports",
-      "summary": "Generated reports archive.",
-      "usedBy": "src/routes/reports.tsx",
-      "response": { "type": "array", "items": { "$ref": "#/$defs/ReportFile" } }
-    },
-    {
-      "method": "GET",
-      "path": "/api/thresholds",
-      "summary": "Current alert thresholds.",
-      "usedBy": "src/routes/settings.tsx",
-      "response": { "$ref": "#/$defs/Thresholds" }
-    },
-    {
-      "method": "PUT",
-      "path": "/api/thresholds",
-      "summary": "Replaces alert thresholds.",
-      "usedBy": "src/routes/settings.tsx",
-      "request": { "$ref": "#/$defs/Thresholds" },
-      "response": { "$ref": "#/$defs/Thresholds" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/notification-settings",
-      "summary": "Channel toggles and recipients.",
-      "usedBy": "src/routes/settings.tsx",
-      "response": { "$ref": "#/$defs/NotificationSettings" }
-    },
-    {
-      "method": "PUT",
-      "path": "/api/notification-settings",
-      "summary": "Replaces channel toggles and recipients.",
-      "usedBy": "src/routes/settings.tsx",
-      "request": { "$ref": "#/$defs/NotificationSettings" },
-      "response": { "$ref": "#/$defs/NotificationSettings" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/users",
-      "summary": "System users table.",
-      "usedBy": "src/routes/users.tsx",
-      "response": { "type": "array", "items": { "$ref": "#/$defs/AppUser" } }
-    },
-    {
-      "method": "POST",
-      "path": "/api/users",
-      "summary": "Creates a user (defaults to staff role).",
-      "usedBy": "src/routes/users.tsx (Add User dialog)",
-      "request": { "$ref": "#/$defs/CreateUserRequest" },
-      "response": { "$ref": "#/$defs/AppUser" }
-    },
-    {
-      "method": "GET",
-      "path": "/api/audit-trail",
-      "summary": "Audit trail table.",
-      "usedBy": "src/routes/users.tsx",
-      "response": { "type": "array", "items": { "$ref": "#/$defs/AuditEntry" } }
+  "info": {
+    "title": "Clinic Medicine Storage Monitor API",
+    "description": "Medicine storage telemetry ingested over MQTT, exposed over HTTP, with sqlite persistence.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    { "name": "health", "description": "Liveness and readiness probes" },
+    { "name": "telemetry", "description": "Storage device readings" },
+    { "name": "sensors", "description": "Sensor registry" },
+    { "name": "readings", "description": "Latest readings and temperature trend" },
+    { "name": "alerts", "description": "Threshold violations" },
+    { "name": "access", "description": "Container access events" },
+    { "name": "notifications", "description": "SMS and buzzer dispatch log" },
+    { "name": "dashboard", "description": "Dashboard aggregates" },
+    { "name": "settings", "description": "Thresholds and notification settings" },
+    { "name": "users", "description": "System users and audit trail" },
+    { "name": "auth", "description": "Demo role login" }
+  ],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "ReadingDto": {
+        "type": "object",
+        "properties": {
+          "deviceId": { "type": "string", "example": "fridge-01" },
+          "temperatureC": { "type": "number", "example": 4.5 },
+          "humidityPct": { "type": "number", "example": 60 },
+          "recordedAt": { "type": "string", "example": "2026-09-06T07:00:00.000Z" }
+        },
+        "required": ["deviceId", "temperatureC", "humidityPct", "recordedAt"]
+      },
+      "PublishReadingDto": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "example": "fridge-01",
+            "description": "Storage device id (also encoded in the MQTT topic)"
+          },
+          "temperatureC": {
+            "type": "number",
+            "example": 4.5,
+            "minimum": -30,
+            "maximum": 80,
+            "description": "Temperature in Celsius"
+          },
+          "humidityPct": {
+            "type": "number",
+            "example": 60,
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Relative humidity in percent"
+          },
+          "recordedAt": {
+            "type": "string",
+            "example": "2026-09-06T07:00:00.000Z",
+            "description": "ISO timestamp; defaults to server time when omitted"
+          }
+        },
+        "required": ["deviceId", "temperatureC", "humidityPct"]
+      },
+      "PublishAckDto": {
+        "type": "object",
+        "properties": {
+          "published": { "type": "boolean", "example": true },
+          "ack": { "type": "object", "example": { "received": true, "deviceId": "fridge-01" } }
+        },
+        "required": ["published", "ack"]
+      },
+      "SensorDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "SEN001" },
+          "type": { "type": "string", "enum": ["Temp/Humidity", "Magnetic Door"] },
+          "location": { "type": "string", "example": "Medicine Storage Room A" },
+          "model": { "type": "string", "example": "SHT31" },
+          "status": { "type": "string", "enum": ["Active", "Inactive"] }
+        },
+        "required": ["id", "type", "location", "model", "status"]
+      },
+      "CreateSensorDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "SEN004" },
+          "type": { "type": "string", "enum": ["Temp/Humidity", "Magnetic Door"] },
+          "location": { "type": "string", "example": "Medicine Storage Room A" },
+          "model": { "type": "string", "example": "SHT31" },
+          "status": { "type": "string", "enum": ["Active", "Inactive"], "default": "Active" },
+          "container": { "type": "string", "example": "Medicine Cabinet A" }
+        },
+        "required": ["id", "type", "location", "model"]
+      },
+      "UpdateSensorDto": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string", "example": "Medicine Storage Room B" },
+          "model": { "type": "string", "example": "SHT31" },
+          "status": { "type": "string", "enum": ["Active", "Inactive"] },
+          "container": { "type": "string", "example": "Medicine Cabinet A" }
+        }
+      },
+      "ThresholdsDto": {
+        "type": "object",
+        "properties": {
+          "fridgeMin": { "type": "number", "example": 2 },
+          "fridgeMax": { "type": "number", "example": 8 },
+          "roomMax": { "type": "number", "example": 25 },
+          "doorOpenLimitMin": { "type": "number", "example": 5 }
+        },
+        "required": ["fridgeMin", "fridgeMax", "roomMax", "doorOpenLimitMin"]
+      },
+      "NotificationSettingsDto": {
+        "type": "object",
+        "properties": {
+          "smsEnabled": { "type": "boolean", "example": true },
+          "buzzerEnabled": { "type": "boolean", "example": true },
+          "emailEnabled": { "type": "boolean", "example": false },
+          "recipients": {
+            "example": ["+27731234567"],
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["smsEnabled", "buzzerEnabled", "emailEnabled", "recipients"]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": { "role": { "type": "string", "enum": ["admin", "supervisor", "staff"] } },
+        "required": ["role"]
+      },
+      "UserDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "number", "example": 1 },
+          "name": { "type": "string", "example": "Dr. Ajibola" },
+          "role": { "type": "string", "enum": ["admin", "supervisor", "staff"] },
+          "contact": { "type": "string", "example": "admin@clinic.co.za" },
+          "lastLogin": { "type": "object", "example": "2026-06-02T08:00:00.000Z" },
+          "status": { "type": "string", "enum": ["Active", "Disabled"] }
+        },
+        "required": ["id", "name", "role", "contact", "lastLogin", "status"]
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "example": "Nurse Khumalo" },
+          "role": {
+            "type": "string",
+            "enum": ["admin", "supervisor", "staff"],
+            "default": "staff"
+          },
+          "contact": { "type": "string", "example": "+27730000000" }
+        },
+        "required": ["name"]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "example": "Nurse Khumalo" },
+          "role": { "type": "string", "enum": ["admin", "supervisor", "staff"] },
+          "contact": { "type": "string", "example": "+27730000000" },
+          "status": { "type": "string", "enum": ["Active", "Disabled"] }
+        }
+      },
+      "AuditDto": {
+        "type": "object",
+        "properties": {
+          "timestamp": { "type": "string", "example": "2026-06-02 09:45:20" },
+          "user": { "type": "string", "example": "System" },
+          "action": { "type": "string", "example": "Alert Triggered" },
+          "details": { "type": "string", "example": "Unauthorized Access SEN006" }
+        },
+        "required": ["timestamp", "user", "action", "details"]
+      },
+      "NotificationDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "NOT007" },
+          "alertId": { "type": "string", "example": "ALT006" },
+          "type": { "type": "string", "enum": ["SMS", "Buzzer"] },
+          "recipient": { "type": "string", "example": "+27731234567" },
+          "message": {
+            "type": "string",
+            "example": "ALERT: Vaccine Container unauthorized access detected"
+          }
+        },
+        "required": ["id", "alertId", "type", "recipient", "message"]
+      },
+      "AlertDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "ALT001" },
+          "sensorId": { "type": "string", "example": "SEN001" },
+          "type": { "type": "string", "example": "High Temperature" },
+          "value": { "type": "string", "example": "25.1°C" },
+          "time": {
+            "type": "string",
+            "example": "2026-06-02T08:15:00.000Z",
+            "description": "ISO 8601 (UI formats it)"
+          },
+          "severity": { "type": "string", "enum": ["Critical", "High", "Medium"] },
+          "status": { "type": "string", "enum": ["Active", "Resolved"] }
+        },
+        "required": ["id", "sensorId", "type", "value", "time", "severity", "status"]
+      },
+      "AccessEventDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "CST002" },
+          "sensorId": { "type": "string", "example": "SEN005" },
+          "container": { "type": "string", "example": "Medicine Cabinet A" },
+          "open": { "type": "boolean", "example": true },
+          "time": { "type": "string", "example": "2026-06-02T08:15:30.000Z" },
+          "duration": { "type": "string", "example": "5m" },
+          "reason": { "type": "string", "example": "Staff access" }
+        },
+        "required": ["id", "sensorId", "container", "open", "time", "duration", "reason"]
+      },
+      "SensorReadingDto": {
+        "type": "object",
+        "properties": {
+          "sensorId": { "type": "string", "example": "SEN001" },
+          "temp": { "type": "number", "example": 25.1 },
+          "humidity": { "type": "number", "example": 49 },
+          "containerOpen": { "type": "boolean", "example": false },
+          "status": { "type": "string", "enum": ["Normal", "Warning", "Critical"] },
+          "alerts": { "type": "number", "example": 0 }
+        },
+        "required": ["sensorId", "status", "alerts"]
+      },
+      "TemperatureSeriesDto": {
+        "type": "object",
+        "properties": {
+          "sensorId": { "type": "string", "example": "SEN001" },
+          "unit": { "type": "string", "example": "°C" },
+          "intervalMinutes": { "type": "number", "example": 120 },
+          "limit": { "type": "number", "example": 25 },
+          "points": { "example": [22, 23, 24], "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["sensorId", "unit", "intervalMinutes", "limit", "points"]
+      },
+      "DashboardSummaryDto": {
+        "type": "object",
+        "properties": {
+          "avgTemperature": { "type": "number", "example": 22.5 },
+          "avgHumidity": { "type": "number", "example": 45.2 },
+          "humidityRange": { "type": "object", "example": { "min": 30, "max": 60 } },
+          "activeAlerts": { "type": "number", "example": 2 },
+          "criticalCount": { "type": "number", "example": 1 },
+          "highCount": { "type": "number", "example": 1 },
+          "systemStatus": { "type": "string", "enum": ["Online", "Offline", "Degraded"] },
+          "lastSync": { "type": "string", "example": "2026-06-02T08:15:00.000Z" }
+        },
+        "required": [
+          "avgTemperature",
+          "avgHumidity",
+          "humidityRange",
+          "activeAlerts",
+          "criticalCount",
+          "highCount",
+          "systemStatus",
+          "lastSync"
+        ]
+      }
     }
-  ]
+  }
 }

@@ -9,7 +9,6 @@ import { HealthModule } from "./health/health.module.js";
 import { IngestModule } from "./ingest/ingest.module.js";
 import { MqttModule } from "./mqtt/mqtt.module.js";
 import { ReadingsModule } from "./readings/readings.module.js";
-import { ReportsModule } from "./reports/reports.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
 import { SeedService } from "./seed/seed.service.js";
 import { SensorsModule } from "./sensors/sensors.module.js";
@@ -36,7 +35,6 @@ import { UsersModule } from "./users/users.module.js";
     AccessModule,
     ReadingsModule,
     DashboardModule,
-    ReportsModule,
     IngestModule,
   ],
   providers: [SeedService],

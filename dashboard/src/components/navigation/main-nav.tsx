@@ -7,14 +7,7 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 
-export type AppRoute =
-  | "/"
-  | "/realtime"
-  | "/access"
-  | "/alerts"
-  | "/reports"
-  | "/settings"
-  | "/users";
+export type AppRoute = "/" | "/realtime" | "/access" | "/alerts" | "/settings" | "/users";
 
 export interface NavItem {
   to: AppRoute;
@@ -38,10 +31,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Management",
-    items: [
-      { to: "/alerts", label: "Alerts & Events" },
-      { to: "/reports", label: "Reports" },
-    ],
+    items: [{ to: "/alerts", label: "Alerts & Events" }],
   },
   {
     title: "System",

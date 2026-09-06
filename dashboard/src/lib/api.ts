@@ -126,18 +126,6 @@ export interface TrendResponse {
   values?: number[];
 }
 
-export interface ReportsSummary {
-  complianceScore: number;
-  accessTotal: number;
-  wastePrevented: string | number;
-}
-
-export interface ReportFile {
-  name: string;
-  size: string;
-  downloadUrl: string;
-}
-
 export interface NotificationSettings {
   smsEnabled: boolean;
   buzzerEnabled: boolean;
@@ -349,32 +337,6 @@ export async function getNotifications(alertId?: string): Promise<Notification[]
   );
   const list = Array.isArray(raw) ? raw : ((raw.notifications ?? raw.data ?? []) as unknown);
   return (list as Record<string, unknown>[]).map(normalizeNotification);
-}
-
-export async function getReportsSummary(): Promise<ReportsSummary> {
-  const raw = await apiFetch<Record<string, unknown>>("/api/reports/summary");
-  return {
-    complianceScore: num(raw.complianceScore ?? raw.compliance_score ?? raw.score, 0) ?? 0,
-    accessTotal: num(raw.accessTotal ?? raw.access_total ?? raw.totalAccess, 0) ?? 0,
-    wastePrevented: (raw.wastePrevented ?? raw.waste_prevented ?? "-") as string | number,
-  };
-}
-
-export async function getReports(): Promise<ReportFile[]> {
-  const raw = await apiFetch<Record<string, unknown>[] | Record<string, unknown>>("/api/reports");
-  const list = Array.isArray(raw) ? raw : ((raw.reports ?? raw.data ?? raw.files ?? []) as unknown);
-  return (list as Record<string, unknown>[]).map((r) => ({
-    name: str(r.name ?? r.file ?? r.filename),
-    size: str(r.size, "-"),
-    downloadUrl:
-      str(r.downloadUrl ?? r.download_url ?? r.url, "") ||
-      `/api/reports/${encodeURIComponent(str(r.name ?? r.file))}`,
-  }));
-}
-
-export function reportDownloadUrl(file: ReportFile): string {
-  if (file.downloadUrl.startsWith("http")) return file.downloadUrl;
-  return `${API_BASE}${file.downloadUrl.startsWith("/") ? "" : "/"}${file.downloadUrl}`;
 }
 
 export async function getThresholds(): Promise<Thresholds> {

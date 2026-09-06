@@ -28,16 +28,3 @@ export class DashboardSummaryDto {
   @ApiProperty({ enum: ["Online", "Offline", "Degraded"] }) systemStatus!: string;
   @ApiProperty({ example: "2026-06-02T08:15:00.000Z" }) lastSync!: string;
 }
-
-export class ReportSummaryDto {
-  @ApiProperty({ example: 98 }) complianceScore!: number;
-  @ApiProperty({ example: 95 }) complianceTarget!: number;
-  @ApiProperty({ example: 42 }) totalAccessEvents!: number;
-  @ApiProperty({ example: "R 12,500" }) wastePrevented!: string;
-}
-
-export class ReportFileDto {
-  @ApiProperty({ example: "Daily_Report_2026-06-01.pdf" }) name!: string;
-  @ApiProperty({ example: "2.4 MB" }) size!: string;
-  @ApiProperty({ example: "/api/reports/Daily_Report_2026-06-01.pdf" }) downloadUrl!: string;
-}

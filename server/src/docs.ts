@@ -22,7 +22,6 @@ export function setupApiReference(app: INestApplication) {
     .addTag("access", "Container access events")
     .addTag("notifications", "SMS and buzzer dispatch log")
     .addTag("dashboard", "Dashboard aggregates")
-    .addTag("reports", "Compliance reports")
     .addTag("settings", "Thresholds and notification settings")
     .addTag("users", "System users and audit trail")
     .addTag("auth", "Demo role login")
