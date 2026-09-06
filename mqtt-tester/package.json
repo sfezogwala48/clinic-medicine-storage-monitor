@@ -2,20 +2,12 @@
   "name": "mqtt-tester",
   "version": "0.0.0",
   "private": true,
-  "description": "MQTT tester for clinic medicine storage monitor",
+  "description": "MQTT tester (Python + MicroPython umqtt, run via uv). See README.md.",
   "type": "module",
   "scripts": {
-    "dev": "vp node ./src/index.ts",
-    "check": "vp check"
-  },
-  "dependencies": {
-    "mqtt": "^5.15.2"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vite-plus": "catalog:"
+    "dev": "uv run tester.py burst",
+    "burst": "uv run tester.py burst",
+    "check": "uv run python -m py_compile tester.py shim.py"
   },
   "devEngines": {
     "packageManager": {
