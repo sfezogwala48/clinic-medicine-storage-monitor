@@ -196,11 +196,16 @@ export interface LoginResponse {
   user: ApiUser;
 }
 
-/** Standard credential login: contact (email/phone) or display name + password. */
-export async function login(identifier: string, password: string): Promise<LoginResponse> {
+/** Standard credential login: contact (email/phone) or display name + password.
+ *  `role` is the pre-selected user type — the server rejects accounts outside it. */
+export async function login(
+  identifier: string,
+  password: string,
+  role?: Role,
+): Promise<LoginResponse> {
   const data = await apiFetch<LoginResponse>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ identifier: identifier.trim(), password }),
+    body: JSON.stringify({ identifier: identifier.trim(), password, role }),
   });
   setToken(data.token);
   setStoredUser(data.user);

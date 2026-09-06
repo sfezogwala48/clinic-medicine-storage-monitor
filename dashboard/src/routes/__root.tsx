@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Outlet, createRootRoute, useLocation } from "@tanstack/react-router";
 import {
+  ArrowLeft,
+  ClipboardCheck,
   Eye,
   EyeOff,
   HeartPulse,
@@ -9,6 +11,8 @@ import {
   Menu,
   Moon,
   Pencil,
+  ShieldCheck,
+  Stethoscope,
   Sun,
 } from "lucide-react";
 
@@ -109,26 +113,61 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+const LOGIN_ROLES: { value: Role; label: string; hint: string; icon: React.ReactNode }[] = [
+  {
+    value: "admin",
+    label: "Admin",
+    hint: "Full access to all modules",
+    icon: <ShieldCheck className="h-5 w-5" />,
+  },
+  {
+    value: "supervisor",
+    label: "Supervisor",
+    hint: "Alerts & oversight",
+    icon: <ClipboardCheck className="h-5 w-5" />,
+  },
+  {
+    value: "staff",
+    label: "Staff",
+    hint: "Daily operations",
+    icon: <Stethoscope className="h-5 w-5" />,
+  },
+];
+
 function LoginScreen({
   onLogin,
 }: {
-  onLogin: (identifier: string, password: string) => Promise<void>;
+  onLogin: (identifier: string, password: string, role: Role) => Promise<void>;
 }) {
+  const [role, setRole] = React.useState<Role | null>(null);
   const [identifier, setIdentifier] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const canSubmit = identifier.trim() !== "" && password !== "" && !pending;
+  const selected = LOGIN_ROLES.find((r) => r.value === role) ?? null;
+  const canSubmit = role !== null && identifier.trim() !== "" && password !== "" && !pending;
+
+  const pickRole = (next: Role) => {
+    setRole(next);
+    setError(null);
+  };
+
+  const goBack = () => {
+    setRole(null);
+    setIdentifier("");
+    setPassword("");
+    setError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || role === null) return;
     setPending(true);
     setError(null);
     try {
-      await onLogin(identifier.trim(), password);
+      await onLogin(identifier.trim(), password, role);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -150,59 +189,86 @@ function LoginScreen({
           <CardTitle className="text-xl tracking-tight">MediStore Monitor</CardTitle>
           <CardDescription>Dr Ajibola&apos;s Clinic &mdash; sign in to continue</CardDescription>
         </CardHeader>
-        <CardContent className="pt-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="login-identifier">Contact or username</Label>
-              <Input
-                id="login-identifier"
-                autoComplete="username"
-                autoFocus
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="e.g. admin@clinic.co.za"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="login-password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="login-password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Your password"
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            {error && (
-              <p
-                role="alert"
-                className="rounded-md bg-red-500/10 px-3 py-2 text-center text-xs text-red-700 dark:text-red-300"
+        <CardContent className="space-y-2 pt-4">
+          {selected === null ? (
+            LOGIN_ROLES.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => pickRole(r.value)}
+                className="group flex w-full items-center gap-3 rounded-lg border border-input bg-background px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent"
               >
-                {error}
-              </p>
-            )}
-            <button
-              type="submit"
-              className={buttonVariants({ className: "w-full" })}
-              disabled={!canSubmit}
-            >
-              <LockKeyhole className="h-4 w-4" />
-              {pending ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
-          <p className="pt-4 text-center text-[11px] text-muted-foreground">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  {r.icon}
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold">{r.label}</span>
+                  <span className="block text-xs text-muted-foreground">{r.hint}</span>
+                </span>
+              </button>
+            ))
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <button
+                type="button"
+                onClick={goBack}
+                className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {selected.label} — change user type
+              </button>
+              <div className="space-y-2">
+                <Label htmlFor="login-identifier">Username</Label>
+                <Input
+                  id="login-identifier"
+                  autoComplete="username"
+                  autoFocus
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="Contact or display name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Your password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((s) => !s)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-md bg-red-500/10 px-3 py-2 text-center text-xs text-red-700 dark:text-red-300"
+                >
+                  {error}
+                </p>
+              )}
+              <button
+                type="submit"
+                className={buttonVariants({ className: "w-full" })}
+                disabled={!canSubmit}
+              >
+                <LockKeyhole className="h-4 w-4" />
+                {pending ? "Signing in…" : `Sign in as ${selected.label}`}
+              </button>
+            </form>
+          )}
+          <p className="pt-2 text-center text-[11px] text-muted-foreground">
             Seeded demo accounts: admin@clinic.co.za, +27721111111 (supervisor), +27730000000
             (staff). Ask your admin for credentials.
           </p>
@@ -490,8 +556,8 @@ function RootComponent() {
   const [validating, setValidating] = React.useState(() => getToken() !== null);
   const role: Role | null = user?.role ?? null;
 
-  const handleLogin = async (identifier: string, password: string) => {
-    const { user: loggedIn } = await apiLogin(identifier, password);
+  const handleLogin = async (identifier: string, password: string, role: Role) => {
+    const { user: loggedIn } = await apiLogin(identifier, password, role);
     setUser(loggedIn);
   };
 

@@ -45,6 +45,18 @@ describe("Auth (e2e)", () => {
       .expect(200);
   });
 
+  it("enforces the pre-selected user type", async () => {
+    await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .send({ identifier: "admin@clinic.co.za", password: "Admin123!", role: "admin" })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .send({ identifier: "admin@clinic.co.za", password: "Admin123!", role: "staff" })
+      .expect(401);
+  });
+
   it("rejects wrong passwords and legacy role-only logins", async () => {
     await request(app.getHttpServer())
       .post("/api/auth/login")

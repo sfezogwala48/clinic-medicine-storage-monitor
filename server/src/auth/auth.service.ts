@@ -57,7 +57,11 @@ export class AuthService {
     );
   }
 
-  async login(identifier: string, password: string): Promise<{ token: string; user: AuthUserDto }> {
+  async login(
+    identifier: string,
+    password: string,
+    expectedRole?: string,
+  ): Promise<{ token: string; user: AuthUserDto }> {
     const user = await this.findByIdentifier(identifier);
     // Generic message to avoid user enumeration.
     if (!user || user.status !== "Active" || !user.passwordHash) {
@@ -65,6 +69,10 @@ export class AuthService {
     }
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
+    // The UI pre-selects a user type; the account must belong to it.
+    if (expectedRole && user.role !== expectedRole) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
 
     user.lastLoginAt = new Date().toISOString();
     await this.users.save(user);

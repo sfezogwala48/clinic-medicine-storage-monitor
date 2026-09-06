@@ -10,8 +10,8 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { AuthenticatedRequest } from "./jwt-auth.guard.js";
-import { IsString, MinLength } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { IsIn, IsOptional, IsString, MinLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { AuthService } from "./auth.service.js";
 import { Public } from "./public.decorator.js";
 
@@ -27,6 +27,14 @@ export class LoginDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @ApiPropertyOptional({
+    description: "When the client pre-selected a user type, the account must have this role.",
+    enum: ["admin", "supervisor", "staff"],
+  })
+  @IsOptional()
+  @IsIn(["admin", "supervisor", "staff"])
+  role?: string;
 }
 
 export class ChangePasswordDto {
@@ -52,13 +60,11 @@ export class AuthController {
   @ApiResponse({ status: 200, description: "Authenticated." })
   @ApiResponse({ status: 401, description: "Invalid credentials." })
   async login(@Body() body: LoginDto) {
-    const raw = body as Partial<LoginDto> & { role?: string };
-    if ((!raw.identifier || !raw.password) && raw.role) {
-      throw new BadRequestException(
-        "Role-only login was removed. Log in with your contact (or name) and password.",
-      );
+    const raw = body as Partial<LoginDto>;
+    if ((!raw.identifier || !raw.password) && raw.role && !raw.identifier) {
+      throw new BadRequestException("Enter your username and password to sign in.");
     }
-    return this.auth.login(body.identifier, body.password);
+    return this.auth.login(body.identifier, body.password, body.role);
   }
 
   @Get("me")
