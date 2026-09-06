@@ -1,5 +1,7 @@
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
+import "@fontsource/merriweather/700.css";
+import "@fontsource/merriweather/900.css";
 import { getRouter } from "./router";
 
 const router = getRouter();

@@ -77,7 +77,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
       </span>
       {!compact && (
         <span className="leading-tight">
-          <span className="block text-[15px] font-bold tracking-tight">MediStore</span>
+          <span className="block font-display text-[15px] font-bold tracking-tight">MediStore</span>
           <span className="block text-[11px] font-medium text-muted-foreground">
             Storage Monitor
           </span>
@@ -262,7 +262,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
               <SidebarNav onNavigate={() => setMobileNavOpen(false)} />
             </RouterSheet>
             <div className="min-w-0">
-              <h1 className="truncate text-base font-bold tracking-tight sm:text-lg">
+              <h1 className="truncate font-display text-base font-bold tracking-tight sm:text-lg">
                 {PAGE_TITLES[pathname] ?? "Dashboard"}
               </h1>
             </div>
