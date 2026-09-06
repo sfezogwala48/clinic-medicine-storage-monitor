@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FALLBACK, formatTime, getAccessLog, useApiQuery } from "@/lib/api";
+import { formatTime, getAccessLog, useApiQuery } from "@/lib/api";
 
 export const Route = createFileRoute("/access")({ component: AccessPage });
 
@@ -27,7 +27,7 @@ const LIMITS = [10, 25, 50, 100, 200];
 
 function AccessPage() {
   const [limit, setLimit] = React.useState(50);
-  const log = useApiQuery(() => getAccessLog(limit), FALLBACK.access, {
+  const log = useApiQuery(() => getAccessLog(limit), [], {
     deps: [limit],
     pollMs: 15_000,
   });
@@ -38,7 +38,7 @@ function AccessPage() {
         <p className="text-sm text-muted-foreground">
           Newest first · durations pre-formatted by the server (<code>"5m"</code>, <code>"-"</code>{" "}
           for close events).
-          {!log.live && !log.loading && " Showing cached data — backend unreachable."}
+          {!log.live && !log.loading && " Backend unreachable."}
         </p>
         <div className="flex items-center gap-2">
           <label htmlFor="access-limit" className="text-sm text-muted-foreground">
@@ -76,10 +76,16 @@ function AccessPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {log.loading && log.data.length === 0 ? (
+              {log.loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     Loading access log…
+                  </TableCell>
+                </TableRow>
+              ) : log.data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    No access events yet.
                   </TableCell>
                 </TableRow>
               ) : (

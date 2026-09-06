@@ -1,22 +1,15 @@
 import * as React from "react";
-import {
-  ACCESS_LOG,
-  ALERTS,
-  DEFAULT_THRESHOLDS,
-  NOTIFICATIONS,
-  READINGS,
-  SENSORS,
-  TEMPERATURE_TREND_24H,
-  USERS,
-  type AccessEvent,
-  type Alert,
-  type AppUser,
-  type Notification,
-  type Role,
-  type Sensor,
-  type SensorReading,
-  type Thresholds,
-} from "@/data/clinic";
+import type {
+  AccessEvent,
+  Alert,
+  AppUser,
+  Notification,
+  Role,
+  Sensor,
+  SensorReading,
+  Thresholds,
+} from "./types";
+import { EMPTY_THRESHOLDS } from "./types";
 
 export type { AccessEvent, Alert, AppUser, Notification, Role, Sensor, SensorReading, Thresholds };
 
@@ -388,18 +381,17 @@ export async function getThresholds(): Promise<Thresholds> {
   const raw = await apiFetch<Record<string, unknown>>("/api/thresholds");
   return {
     fridgeMin:
-      num(raw.fridgeMin ?? raw.fridge_min, DEFAULT_THRESHOLDS.fridgeMin) ??
-      DEFAULT_THRESHOLDS.fridgeMin,
+      num(raw.fridgeMin ?? raw.fridge_min, EMPTY_THRESHOLDS.fridgeMin) ??
+      EMPTY_THRESHOLDS.fridgeMin,
     fridgeMax:
-      num(raw.fridgeMax ?? raw.fridge_max, DEFAULT_THRESHOLDS.fridgeMax) ??
-      DEFAULT_THRESHOLDS.fridgeMax,
-    roomMax:
-      num(raw.roomMax ?? raw.room_max, DEFAULT_THRESHOLDS.roomMax) ?? DEFAULT_THRESHOLDS.roomMax,
+      num(raw.fridgeMax ?? raw.fridge_max, EMPTY_THRESHOLDS.fridgeMax) ??
+      EMPTY_THRESHOLDS.fridgeMax,
+    roomMax: num(raw.roomMax ?? raw.room_max, EMPTY_THRESHOLDS.roomMax) ?? EMPTY_THRESHOLDS.roomMax,
     doorOpenLimitMin:
       num(
         raw.doorOpenLimitMin ?? raw.door_open_limit_min ?? raw.doorOpenLimit,
-        DEFAULT_THRESHOLDS.doorOpenLimitMin,
-      ) ?? DEFAULT_THRESHOLDS.doorOpenLimitMin,
+        EMPTY_THRESHOLDS.doorOpenLimitMin,
+      ) ?? EMPTY_THRESHOLDS.doorOpenLimitMin,
   };
 }
 
@@ -504,7 +496,8 @@ export async function checkBackend(): Promise<boolean> {
 }
 
 /* ------------------------------------------------------------------ */
-/* React hook: query with mock fallback + polling (per USAGE.md §4)     */
+/* React hook: query with polling. No mock data — callers render loading,
+   empty and error states from live/error/loading flags.                  */
 /* ------------------------------------------------------------------ */
 
 export interface QueryState<T> {
@@ -540,7 +533,7 @@ export function useApiQuery<T>(
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        // USAGE.md §4: empty dashboard = no telemetry / broker down → keep mock data, flag offline
+        // No dummy data: keep the neutral initial value and flag the error.
         setData(fallback);
         setLive(false);
         setError(e instanceof Error ? e.message : "Request failed");
@@ -562,14 +555,3 @@ export function useApiQuery<T>(
 
   return { data, loading, error, live, refresh: () => setTick((t) => t + 1) };
 }
-
-/** Demo fallbacks transcribed from the seeded server data (USAGE.md §3). */
-export const FALLBACK = {
-  sensors: SENSORS,
-  readings: READINGS,
-  alerts: ALERTS,
-  access: ACCESS_LOG,
-  notifications: NOTIFICATIONS,
-  users: USERS,
-  trendValues: TEMPERATURE_TREND_24H,
-};

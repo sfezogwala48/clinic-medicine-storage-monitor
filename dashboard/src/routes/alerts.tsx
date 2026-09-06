@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/table";
 import { RouterDialog } from "@/components/ui/router-dialog";
 import {
-  FALLBACK,
   acknowledgeAlert,
   formatTime,
   getAlerts,
@@ -41,11 +40,11 @@ function AlertsPage() {
   const [ackError, setAckError] = React.useState<string | null>(null);
   const [ackedIds, setAckedIds] = React.useState<Set<string>>(new Set());
 
-  const alerts = useApiQuery(() => getAlerts(filter), FALLBACK.alerts, {
+  const alerts = useApiQuery(() => getAlerts(filter), [], {
     deps: [filter],
     pollMs: 15_000,
   });
-  const notifications = useApiQuery(() => getNotifications(selectedId), FALLBACK.notifications, {
+  const notifications = useApiQuery(() => getNotifications(selectedId), [], {
     deps: [selectedId],
     pollMs: 20_000,
   });
@@ -93,8 +92,8 @@ function AlertsPage() {
           ))}
         </div>
         <p className="text-sm text-muted-foreground">
-          {alerts.live ? "Live from server" : "Cached data — backend unreachable"} · acknowledging
-          an alert resolves it and silences buzzers at that location.
+          {alerts.live ? "Live from server" : "Backend unreachable"} · acknowledging an alert
+          resolves it and silences buzzers at that location.
         </p>
       </div>
 
@@ -152,56 +151,70 @@ function AlertsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((alert) => (
-                <TableRow
-                  key={alert.id}
-                  className={cn(selectedId === alert.id && "bg-accent/50")}
-                  onClick={() => setSelectedId(alert.id)}
-                >
-                  <TableCell className="whitespace-nowrap font-mono">{alert.id}</TableCell>
-                  <TableCell>{alert.type}</TableCell>
-                  <TableCell className="hidden whitespace-nowrap lg:table-cell">
-                    {alert.sensorId}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap font-semibold">{alert.value}</TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">
-                    {formatTime(alert.time)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <Badge variant={severityVariant(alert.severity)}>{alert.severity}</Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <Badge variant={alert.status === "Active" ? "success" : "secondary"}>
-                      {alert.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    {alert.status === "Active" ? (
-                      <RouterDialog
-                        trigger={
-                          <Button size="sm" variant="outline">
-                            Acknowledge
-                          </Button>
-                        }
-                        title={`Acknowledge ${alert.id}`}
-                        description={`${alert.type} on ${alert.sensorId} at ${formatTime(alert.time)}`}
-                      >
-                        <p className="text-sm text-muted-foreground">
-                          Confirming marks this alert Resolved and silences buzzers at that location
-                          (<code>PATCH /api/alerts/:id/acknowledge</code>).
-                        </p>
-                        <div className="mt-4 flex justify-end gap-2">
-                          <Button size="sm" onClick={() => doAcknowledge(alert.id)}>
-                            Confirm Acknowledge
-                          </Button>
-                        </div>
-                      </RouterDialog>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
+              {alerts.loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    Loading alerts…
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : visible.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    No alerts — the fleet is quiet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visible.map((alert) => (
+                  <TableRow
+                    key={alert.id}
+                    className={cn(selectedId === alert.id && "bg-accent/50")}
+                    onClick={() => setSelectedId(alert.id)}
+                  >
+                    <TableCell className="whitespace-nowrap font-mono">{alert.id}</TableCell>
+                    <TableCell>{alert.type}</TableCell>
+                    <TableCell className="hidden whitespace-nowrap lg:table-cell">
+                      {alert.sensorId}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap font-semibold">{alert.value}</TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums">
+                      {formatTime(alert.time)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={severityVariant(alert.severity)}>{alert.severity}</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={alert.status === "Active" ? "success" : "secondary"}>
+                        {alert.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      {alert.status === "Active" ? (
+                        <RouterDialog
+                          trigger={
+                            <Button size="sm" variant="outline">
+                              Acknowledge
+                            </Button>
+                          }
+                          title={`Acknowledge ${alert.id}`}
+                          description={`${alert.type} on ${alert.sensorId} at ${formatTime(alert.time)}`}
+                        >
+                          <p className="text-sm text-muted-foreground">
+                            Confirming marks this alert Resolved and silences buzzers at that
+                            location (<code>PATCH /api/alerts/:id/acknowledge</code>).
+                          </p>
+                          <div className="mt-4 flex justify-end gap-2">
+                            <Button size="sm" onClick={() => doAcknowledge(alert.id)}>
+                              Confirm Acknowledge
+                            </Button>
+                          </div>
+                        </RouterDialog>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -232,20 +245,34 @@ function AlertsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {notifications.data.map((n) => (
-                  <TableRow key={n.id}>
-                    <TableCell className="font-mono">{n.id}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1.5">
-                        <MessageSquareText className="h-4 w-4 text-muted-foreground" />
-                        {n.type}
-                      </span>
+                {notifications.loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      Loading notifications…
                     </TableCell>
-                    <TableCell className="font-mono">{n.alertId}</TableCell>
-                    <TableCell>{n.recipient}</TableCell>
-                    <TableCell>{n.message}</TableCell>
                   </TableRow>
-                ))}
+                ) : notifications.data.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      No notifications yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  notifications.data.map((n) => (
+                    <TableRow key={n.id}>
+                      <TableCell className="font-mono">{n.id}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1.5">
+                          <MessageSquareText className="h-4 w-4 text-muted-foreground" />
+                          {n.type}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono">{n.alertId}</TableCell>
+                      <TableCell>{n.recipient}</TableCell>
+                      <TableCell>{n.message}</TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

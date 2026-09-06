@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
-  FALLBACK,
   formatTime,
   formatTimeOnly,
   getAccessLog,
@@ -165,38 +164,26 @@ function DashboardPage() {
   const summary = useApiQuery(
     getDashboardSummary,
     {
-      avgTemp: 22.5,
-      avgHumidity: 45.2,
-      activeAlerts: 2,
-      criticalAlerts: 1,
-      highAlerts: 1,
-      systemStatus: "Online",
-      lastSync: "just now",
+      avgTemp: null,
+      avgHumidity: null,
+      activeAlerts: 0,
+      criticalAlerts: 0,
+      highAlerts: 0,
+      systemStatus: "Offline",
+      lastSync: null,
     },
     { pollMs: 15_000 },
   );
   const trend = useApiQuery(
     () => getTemperatureTrend(trendSensor, trendRange),
-    {
-      unit: "°C",
-      intervalMinutes: 120,
-      limit: 12,
-      points: FALLBACK.trendValues.map((temp) => ({ time: "", temp })),
-    },
+    { unit: "°C", intervalMinutes: 0, limit: 0, points: [] },
     { deps: [trendSensor, trendRange], pollMs: 30_000 },
   );
-  const access = useApiQuery(() => getAccessLog(3), FALLBACK.access.slice(0, 3), {
-    pollMs: 15_000,
-  });
+  const access = useApiQuery(() => getAccessLog(3), [], { pollMs: 15_000 });
 
   const s = summary.data;
-  const livePoints = trend.live ? trend.data.points : [];
-  const chartData: TrendDatum[] = (
-    livePoints.length > 0 ? livePoints : FALLBACK.trendValues.map((temp) => ({ time: "", temp }))
-  ).map((p, i) => ({
-    label: p.time
-      ? formatTimeOnly(p.time).slice(0, 5)
-      : `${String((i * 2) % 24).padStart(2, "0")}:00`,
+  const chartData: TrendDatum[] = (trend.live ? trend.data.points : []).map((p) => ({
+    label: p.time ? formatTimeOnly(p.time).slice(0, 5) : "",
     temp: p.temp,
   }));
   const online =
@@ -209,9 +196,8 @@ function DashboardPage() {
       {!summary.live && !summary.loading && (
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="py-3 text-sm text-muted-foreground">
-            Backend unreachable ({summary.error ?? "connection failed"}) — showing seeded demo data.
-            Start the server + MQTT broker per <code>reference/USAGE.md</code> §4 and publish
-            telemetry to populate live readings.{" "}
+            Backend unreachable ({summary.error ?? "connection failed"}) — no data to display. Start
+            the server + MQTT broker and publish telemetry to populate live readings.{" "}
             <Button size="sm" variant="outline" className="ml-2" onClick={summary.refresh}>
               Retry
             </Button>
@@ -245,7 +231,7 @@ function DashboardPage() {
           icon={<Wifi className="h-4 w-4" />}
           title="System Status"
           value={s.systemStatus}
-          sub={`Last sync: ${s.lastSync ? formatTime(s.lastSync) : "just now"}${summary.live ? "" : " (cached)"}`}
+          sub={`Last sync: ${s.lastSync ? formatTime(s.lastSync) : "—"}${summary.live ? "" : " (offline)"}`}
           tone={online ? "primary" : "danger"}
         />
       </div>
@@ -293,8 +279,12 @@ function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            {trend.loading && trend.data.points.length === 0 ? (
+            {trend.loading ? (
               <p className="py-16 text-center text-sm text-muted-foreground">Loading trend…</p>
+            ) : chartData.length === 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                No trend data yet — publish telemetry for {trendSensor} to populate this chart.
+              </p>
             ) : (
               <TempTrendChart data={chartData} />
             )}
@@ -309,19 +299,35 @@ function DashboardPage() {
           <CardContent className="px-2 pb-2">
             <Table>
               <TableBody>
-                {access.data.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell>
-                      <div className="font-semibold tabular-nums">{formatTime(log.time)}</div>
-                      <div className="text-xs text-muted-foreground">{log.container}</div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant={log.reason.includes("Unauthorized") ? "critical" : "success"}>
-                        {log.reason}
-                      </Badge>
+                {access.loading ? (
+                  <TableRow>
+                    <TableCell className="py-6 text-center text-sm text-muted-foreground">
+                      Loading access events…
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : access.data.length === 0 ? (
+                  <TableRow>
+                    <TableCell className="py-6 text-center text-sm text-muted-foreground">
+                      No access events yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  access.data.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell>
+                        <div className="font-semibold tabular-nums">{formatTime(log.time)}</div>
+                        <div className="text-xs text-muted-foreground">{log.container}</div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge
+                          variant={log.reason.includes("Unauthorized") ? "critical" : "success"}
+                        >
+                          {log.reason}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

@@ -15,23 +15,13 @@ import { getReports, getReportsSummary, reportDownloadUrl, useApiQuery } from "@
 
 export const Route = createFileRoute("/reports")({ component: ReportsPage });
 
-const FALLBACK_SUMMARY = { complianceScore: 98, accessTotal: 42, wastePrevented: "R 12,500" };
-const FALLBACK_FILES = [
-  {
-    name: "Daily_Report_2026-06-01.pdf",
-    size: "2.4 MB",
-    downloadUrl: "/api/reports/Daily_Report_2026-06-01.pdf",
-  },
-  {
-    name: "Weekly_Compliance_Wk22.pdf",
-    size: "5.1 MB",
-    downloadUrl: "/api/reports/Weekly_Compliance_Wk22.pdf",
-  },
-];
-
 function ReportsPage() {
-  const summary = useApiQuery(getReportsSummary, FALLBACK_SUMMARY, { pollMs: 60_000 });
-  const files = useApiQuery(getReports, FALLBACK_FILES, { pollMs: 60_000 });
+  const summary = useApiQuery(
+    getReportsSummary,
+    { complianceScore: 0, accessTotal: 0, wastePrevented: "-" },
+    { pollMs: 60_000 },
+  );
+  const files = useApiQuery(getReports, [], { pollMs: 60_000 });
   const s = summary.data;
 
   return (
@@ -48,7 +38,7 @@ function ReportsPage() {
         </Button>
         {!summary.live && !summary.loading && (
           <span className="ml-auto self-center text-xs text-muted-foreground">
-            Cached figures — backend unreachable.
+            Backend unreachable.
           </span>
         )}
       </div>
@@ -116,24 +106,38 @@ function ReportsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {files.data.map((report) => (
-                <TableRow key={report.name}>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-red-500" />
-                      {report.name}
-                    </span>
-                  </TableCell>
-                  <TableCell>{report.size}</TableCell>
-                  <TableCell className="text-right">
-                    <a href={reportDownloadUrl(report)} download={report.name}>
-                      <Button size="sm" variant="outline">
-                        <Download className="h-4 w-4" /> Download
-                      </Button>
-                    </a>
+              {files.loading ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                    Loading reports…
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : files.data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                    No reports generated yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                files.data.map((report) => (
+                  <TableRow key={report.name}>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-red-500" />
+                        {report.name}
+                      </span>
+                    </TableCell>
+                    <TableCell>{report.size}</TableCell>
+                    <TableCell className="text-right">
+                      <a href={reportDownloadUrl(report)} download={report.name}>
+                        <Button size="sm" variant="outline">
+                          <Download className="h-4 w-4" /> Download
+                        </Button>
+                      </a>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

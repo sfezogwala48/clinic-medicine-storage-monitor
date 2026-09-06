@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/table";
 import { RouterDialog } from "@/components/ui/router-dialog";
 import {
-  FALLBACK,
   createUser,
   formatTime,
   getAuditTrail,
@@ -35,32 +34,11 @@ function roleVariant(role: Role) {
   return "secondary" as const;
 }
 
-const FALLBACK_AUDIT = [
-  {
-    time: "2026-06-02 09:45:20",
-    user: "System",
-    action: "Alert Triggered",
-    details: "Unauthorized Access SEN006",
-  },
-  {
-    time: "2026-06-02 08:20:30",
-    user: "Nurse Dlamini",
-    action: "Door Closed",
-    details: "Medicine Cabinet A",
-  },
-  {
-    time: "2026-06-02 08:00:00",
-    user: "Dr. Ajibola",
-    action: "Login",
-    details: "IP: 192.168.1.105",
-  },
-];
-
 function UsersPage() {
-  const usersQuery = useApiQuery(getUsers, FALLBACK.users, { pollMs: 30_000 });
-  const auditQuery = useApiQuery(() => getAuditTrail(100), FALLBACK_AUDIT, { pollMs: 30_000 });
+  const usersQuery = useApiQuery(getUsers, [], { pollMs: 30_000 });
+  const auditQuery = useApiQuery(() => getAuditTrail(100), [], { pollMs: 30_000 });
 
-  const [users, setUsers] = React.useState<AppUser[]>(FALLBACK.users);
+  const [users, setUsers] = React.useState<AppUser[]>([]);
   const [name, setName] = React.useState("");
   const [contact, setContact] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -83,24 +61,14 @@ function UsersPage() {
       setDialogOpen(false);
       usersQuery.refresh();
     } catch (e) {
-      // Offline fallback: POST /api/users needs the server — keep local copy.
-      if (!usersQuery.live) {
-        setUsers((prev) => [
-          ...prev,
-          {
-            name: name.trim(),
-            role: "staff",
-            contact: contact.trim() || "-",
-            lastLogin: "Never",
-            status: "Active",
-          },
-        ]);
-        setName("");
-        setContact("");
-        setDialogOpen(false);
-      } else {
-        setError(e instanceof Error ? e.message : "Create failed");
-      }
+      // No offline fake users: creation requires the backend.
+      setError(
+        !usersQuery.live
+          ? "Cannot create users while the backend is unreachable."
+          : e instanceof Error
+            ? e.message
+            : "Create failed",
+      );
     } finally {
       setSaving(false);
     }
@@ -112,7 +80,7 @@ function UsersPage() {
         <h2 className="text-lg font-semibold">
           System Users{" "}
           {!usersQuery.live && !usersQuery.loading && (
-            <span className="text-sm font-normal text-muted-foreground">(cached)</span>
+            <span className="text-sm font-normal text-muted-foreground">(offline)</span>
           )}
         </h2>
         <RouterDialog
@@ -169,30 +137,44 @@ function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.name}>
-                  <TableCell className="font-semibold">{user.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={roleVariant(user.role)}>
-                      {user.role === "admin"
-                        ? "Admin"
-                        : user.role === "supervisor"
-                          ? "Supervisor"
-                          : "Staff"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{user.contact}</TableCell>
-                  <TableCell className="tabular-nums">{formatTime(user.lastLogin)}</TableCell>
-                  <TableCell>
-                    <Badge variant="success">{user.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button size="icon" variant="ghost" aria-label={`Edit ${user.name}`}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+              {usersQuery.loading && users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    Loading users…
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    No users yet — add the first user above.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.name}>
+                    <TableCell className="font-semibold">{user.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={roleVariant(user.role)}>
+                        {user.role === "admin"
+                          ? "Admin"
+                          : user.role === "supervisor"
+                            ? "Supervisor"
+                            : "Staff"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{user.contact}</TableCell>
+                    <TableCell className="tabular-nums">{formatTime(user.lastLogin)}</TableCell>
+                    <TableCell>
+                      <Badge variant="success">{user.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button size="icon" variant="ghost" aria-label={`Edit ${user.name}`}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -217,16 +199,30 @@ function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {auditQuery.data.map((entry) => (
-                  <TableRow key={`${entry.time}-${entry.action}-${entry.details}`}>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      {formatTime(entry.time)}
+                {auditQuery.loading && auditQuery.data.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      Loading audit trail…
                     </TableCell>
-                    <TableCell>{entry.user}</TableCell>
-                    <TableCell>{entry.action}</TableCell>
-                    <TableCell>{entry.details}</TableCell>
                   </TableRow>
-                ))}
+                ) : auditQuery.data.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      No audit entries yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  auditQuery.data.map((entry) => (
+                    <TableRow key={`${entry.time}-${entry.action}-${entry.details}`}>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {formatTime(entry.time)}
+                      </TableCell>
+                      <TableCell>{entry.user}</TableCell>
+                      <TableCell>{entry.action}</TableCell>
+                      <TableCell>{entry.details}</TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

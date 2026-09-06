@@ -20,7 +20,7 @@ import { MainNav, NAV_SECTIONS } from "@/components/navigation/main-nav";
 import { Button } from "@/components/ui/button";
 import { RouterSheet } from "@/components/ui/router-sheet";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Role } from "@/data/clinic";
+import type { Role } from "@/lib/types";
 import {
   API_BASE,
   checkBackend,

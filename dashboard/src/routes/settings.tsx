@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ApiError,
-  FALLBACK,
   getNotificationSettings,
   getThresholds,
   updateNotificationSettings,
@@ -17,26 +16,26 @@ import {
   useApiQuery,
   type NotificationSettings,
 } from "@/lib/api";
-import { DEFAULT_THRESHOLDS } from "@/data/clinic";
+import { EMPTY_THRESHOLDS } from "@/lib/types";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-const DEFAULT_NOTIF: NotificationSettings = {
-  smsEnabled: true,
-  buzzerEnabled: true,
+const EMPTY_NOTIF: NotificationSettings = {
+  smsEnabled: false,
+  buzzerEnabled: false,
   emailEnabled: false,
-  recipients: ["+27731234567 (Primary)", "+27721111111 (Supervisor)"],
+  recipients: [],
 };
 
 function SettingsPage() {
-  const thresholdsQuery = useApiQuery(getThresholds, DEFAULT_THRESHOLDS);
-  const notifQuery = useApiQuery(getNotificationSettings, DEFAULT_NOTIF);
+  const thresholdsQuery = useApiQuery(getThresholds, EMPTY_THRESHOLDS);
+  const notifQuery = useApiQuery(getNotificationSettings, EMPTY_NOTIF);
 
-  const [thresholds, setThresholds] = React.useState(DEFAULT_THRESHOLDS);
-  const [notif, setNotif] = React.useState<NotificationSettings>(DEFAULT_NOTIF);
-  const [recipientsText, setRecipientsText] = React.useState(DEFAULT_NOTIF.recipients.join("\n"));
+  const [thresholds, setThresholds] = React.useState(EMPTY_THRESHOLDS);
+  const [notif, setNotif] = React.useState<NotificationSettings>(EMPTY_NOTIF);
+  const [recipientsText, setRecipientsText] = React.useState("");
   const [saving, setSaving] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [savingNotif, setSavingNotif] = React.useState<"idle" | "saving" | "saved" | "error">(
     "idle",
@@ -50,14 +49,7 @@ function SettingsPage() {
   React.useEffect(() => {
     if (notifQuery.live) {
       setNotif(notifQuery.data);
-      setRecipientsText(
-        (notifQuery.data.recipients.length > 0
-          ? notifQuery.data.recipients
-          : FALLBACK.sensors.map(() => "")
-        )
-          .filter(Boolean)
-          .join("\n") || DEFAULT_NOTIF.recipients.join("\n"),
-      );
+      setRecipientsText(notifQuery.data.recipients.join("\n"));
     }
   }, [notifQuery.live, notifQuery.data]);
 
@@ -109,7 +101,7 @@ function SettingsPage() {
       {offline && (
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="py-3 text-sm text-muted-foreground">
-            Server unreachable — editing defaults locally. PUTs will fail until the backend is up.
+            Server unreachable — settings will load once the backend is up.
           </CardContent>
         </Card>
       )}
@@ -166,7 +158,7 @@ function SettingsPage() {
                 onChange={set("doorOpenLimitMin")}
               />
             </div>
-            <Button onClick={saveThresholds} disabled={saving === "saving"}>
+            <Button onClick={saveThresholds} disabled={saving === "saving" || offline}>
               {saving === "saved" && <Check className="h-4 w-4" />}
               {saving === "saving"
                 ? "Saving…"
@@ -243,7 +235,11 @@ function SettingsPage() {
                 className="w-full rounded-md border border-input bg-background p-3 text-sm"
               />
             </div>
-            <Button variant="outline" onClick={saveNotif} disabled={savingNotif === "saving"}>
+            <Button
+              variant="outline"
+              onClick={saveNotif}
+              disabled={savingNotif === "saving" || offline}
+            >
               {savingNotif === "saved" && <Check className="h-4 w-4" />}
               {savingNotif === "saving"
                 ? "Saving…"
