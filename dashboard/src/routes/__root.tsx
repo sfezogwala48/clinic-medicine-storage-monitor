@@ -6,6 +6,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  Pencil,
   ShieldCheck,
   Stethoscope,
   Sun,
@@ -18,16 +19,22 @@ import "../styles.css";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { MainNav, NAV_SECTIONS } from "@/components/navigation/main-nav";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RouterDialog } from "@/components/ui/router-dialog";
 import { RouterSheet } from "@/components/ui/router-sheet";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Role } from "@/lib/types";
 import {
   API_BASE,
   checkBackend,
+  getStoredUser,
   getToken,
   login as apiLogin,
   setStoredUser,
   setToken,
+  updateUser,
+  type ApiUser,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -188,6 +195,115 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => Promise<void> }) {
   );
 }
 
+function ProfileBlock({ role }: { role: Role }) {
+  const [open, setOpen] = React.useState(false);
+  const [stored, setStored] = React.useState<ApiUser | null>(null);
+  const [name, setName] = React.useState("");
+  const [contact, setContact] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open) {
+      const s = getStoredUser();
+      setStored(s);
+      setName(s?.name ?? ROLE_NAMES[role]);
+      setContact(s?.contact ?? "");
+      setError(null);
+    }
+  }, [open, role]);
+
+  const userId = typeof stored?.id === "number" ? stored.id : Number(stored?.id ?? Number.NaN);
+  const canSave = Number.isFinite(userId) && name.trim() !== "";
+
+  const save = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateUser(userId, {
+        name: name.trim(),
+        contact: contact.trim() || undefined,
+      });
+      setStoredUser({
+        ...stored,
+        id: updated.id,
+        name: updated.name,
+        role: updated.role,
+        contact: updated.contact,
+      });
+      setStored(getStoredUser());
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const displayName = stored?.name || ROLE_NAMES[role];
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Edit your profile"
+        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-accent"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
+          {displayName.charAt(0)}
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate text-sm font-semibold">{displayName}</span>
+          <span className="block text-xs capitalize text-muted-foreground">{role}</span>
+        </span>
+        <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      </button>
+      <RouterDialog
+        open={open}
+        onOpenChange={setOpen}
+        trigger={<span className="hidden" />}
+        title="Your Profile"
+        description={`Signed in as ${role}. Name and contact sync to the server.`}
+      >
+        <div className="space-y-4">
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          {!Number.isFinite(userId) && (
+            <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              Offline demo session — profile syncs once you sign in with the backend up.
+            </p>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="profile-name">Display name</Label>
+            <Input id="profile-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-contact">Contact</Label>
+            <Input
+              id="profile-contact"
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              placeholder="Phone or email"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <p className="rounded-md border border-input bg-muted px-3 py-2 text-sm capitalize text-muted-foreground">
+              {role} (managed by an admin)
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={save} disabled={saving || !canSave}>
+              {saving ? "Saving…" : "Save Profile"}
+            </Button>
+          </div>
+        </div>
+      </RouterDialog>
+    </>
+  );
+}
+
 function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
   const pathname = useLocation({ select: (s) => s.pathname });
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
@@ -227,15 +343,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
         </div>
         <SidebarNav />
         <div className="border-t border-sidebar-border p-3">
-          <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
-              {ROLE_NAMES[role].charAt(0)}
-            </span>
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-sm font-semibold">{ROLE_NAMES[role]}</span>
-              <span className="block text-xs capitalize text-muted-foreground">{role}</span>
-            </span>
-          </div>
+          <ProfileBlock role={role} />
         </div>
       </aside>
 

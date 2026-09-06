@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,19 @@ import {
 } from "@/components/ui/table";
 import { RouterDialog } from "@/components/ui/router-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   createUser,
+  deleteUser,
   formatTime,
   getAuditTrail,
   getUsers,
+  updateUser,
   useApiQuery,
   type AppUser,
   type Role,
@@ -44,6 +53,15 @@ function UsersPage() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<AppUser | null>(null);
+  const [editName, setEditName] = React.useState("");
+  const [editContact, setEditContact] = React.useState("");
+  const [editRole, setEditRole] = React.useState<Role>("staff");
+  const [editStatus, setEditStatus] = React.useState<AppUser["status"]>("Active");
+  const [editSaving, setEditSaving] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState<AppUser | null>(null);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
 
   React.useEffect(() => {
     setUsers(usersQuery.data);
@@ -71,6 +89,51 @@ function UsersPage() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEdit = (user: AppUser) => {
+    setEditing(user);
+    setEditName(user.name);
+    setEditContact(user.contact === "-" ? "" : user.contact);
+    setEditRole(user.role);
+    setEditStatus(user.status);
+    setEditError(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editing || !editName.trim()) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await updateUser(editing.id, {
+        name: editName.trim(),
+        role: editRole,
+        contact: editContact.trim() || undefined,
+        status: editStatus,
+      });
+      setEditing(null);
+      usersQuery.refresh();
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    setError(null);
+    try {
+      await deleteUser(deleting.id);
+      setDeleting(null);
+      usersQuery.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(null);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -151,7 +214,7 @@ function UsersPage() {
                 </TableRow>
               ) : (
                 users.map((user) => (
-                  <TableRow key={user.name}>
+                  <TableRow key={user.id}>
                     <TableCell className="font-semibold">{user.name}</TableCell>
                     <TableCell>
                       <Badge variant={roleVariant(user.role)}>
@@ -168,9 +231,24 @@ function UsersPage() {
                       <Badge variant="success">{user.status}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="icon" variant="ghost" aria-label={`Edit ${user.name}`}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Edit ${user.name}`}
+                          onClick={() => openEdit(user)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Delete ${user.name}`}
+                          onClick={() => setDeleting(user)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -179,6 +257,91 @@ function UsersPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <RouterDialog
+        open={editing !== null}
+        onOpenChange={(o) => {
+          if (!o) setEditing(null);
+        }}
+        trigger={<span className="hidden" />}
+        title={editing ? `Edit ${editing.name}` : "Edit user"}
+        description="Update the user's details (PATCH /api/users/:id)."
+      >
+        <div className="space-y-4">
+          {editError && <p className="text-sm text-red-600">{editError}</p>}
+          <div className="space-y-2">
+            <Label htmlFor="edit-user-name">Name</Label>
+            <Input
+              id="edit-user-name"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={editRole} onValueChange={(v) => setEditRole(v as Role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="supervisor">Supervisor</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={editStatus}
+                onValueChange={(v) => setEditStatus(v as AppUser["status"])}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-user-contact">Contact</Label>
+            <Input
+              id="edit-user-contact"
+              value={editContact}
+              onChange={(e) => setEditContact(e.target.value)}
+              placeholder="Phone or email"
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={saveEdit} disabled={editSaving || !editName.trim()}>
+              {editSaving ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        </div>
+      </RouterDialog>
+
+      <RouterDialog
+        open={deleting !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleting(null);
+        }}
+        trigger={<span className="hidden" />}
+        title={deleting ? `Delete ${deleting.name}?` : "Delete user?"}
+        description="This removes the user permanently. Their audit entries are kept."
+      >
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleting(null)}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={confirmDelete} disabled={deleteBusy}>
+            {deleteBusy ? "Deleting…" : "Delete"}
+          </Button>
+        </div>
+      </RouterDialog>
 
       <div>
         <h2 className="mb-4 text-lg font-semibold">

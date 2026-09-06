@@ -37,9 +37,10 @@ export function setToken(token: string | null) {
 }
 
 export interface ApiUser {
-  id?: string;
+  id?: number | string;
   name?: string;
   role: Role;
+  contact?: string;
 }
 
 export function getStoredUser(): ApiUser | null {
@@ -435,6 +436,7 @@ export async function updateNotificationSettings(
 
 function normalizeUser(raw: Record<string, unknown>): AppUser {
   return {
+    id: num(raw.id, 0) ?? 0,
     name: str(raw.name, "Unknown"),
     role: (raw.role as Role) ?? "staff",
     contact: str(raw.contact ?? raw.email ?? raw.phone, "-"),
@@ -455,9 +457,31 @@ export async function createUser(name: string, contact?: string): Promise<AppUse
     body: JSON.stringify({ name, contact, role: "staff" }),
   });
   if (!raw || Object.keys(raw).length === 0) {
-    return { name, role: "staff", contact: contact || "-", lastLogin: "Never", status: "Active" };
+    return {
+      id: 0,
+      name,
+      role: "staff",
+      contact: contact || "-",
+      lastLogin: "Never",
+      status: "Active",
+    };
   }
   return normalizeUser(raw);
+}
+
+export async function updateUser(
+  id: number,
+  patch: { name?: string; role?: Role; contact?: string; status?: AppUser["status"] },
+): Promise<AppUser> {
+  const raw = await apiFetch<Record<string, unknown>>(`/api/users/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return normalizeUser(raw);
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  await apiFetch(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 function normalizeAudit(raw: Record<string, unknown>): AuditEntry {

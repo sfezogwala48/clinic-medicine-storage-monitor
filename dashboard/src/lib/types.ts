@@ -67,6 +67,7 @@ export const EMPTY_THRESHOLDS: Thresholds = {
 };
 
 export interface AppUser {
+  id: number;
   name: string;
   role: Role;
   contact: string;
