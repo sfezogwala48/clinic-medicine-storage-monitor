@@ -1,0 +1,27 @@
+{
+  "name": "mqtt-tester",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MQTT tester for clinic medicine storage monitor",
+  "type": "module",
+  "scripts": {
+    "dev": "vp node ./src/index.ts",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.2"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.4",
+      "onFail": "download"
+    }
+  }
+}
