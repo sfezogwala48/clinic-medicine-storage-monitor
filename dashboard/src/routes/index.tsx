@@ -106,11 +106,17 @@ function TempTrendChart({ data }: { data: TrendDatum[] }) {
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={{ stroke: "var(--color-border)" }}
+          tickMargin={8}
+          minTickGap={32}
+        />
         <YAxis
           width={40}
           tickLine={false}
-          axisLine={false}
+          axisLine={{ stroke: "var(--color-border)" }}
           tickFormatter={(v: number) => `${v}°`}
           domain={[
             (dataMin: number) => Math.floor(dataMin - 1),
