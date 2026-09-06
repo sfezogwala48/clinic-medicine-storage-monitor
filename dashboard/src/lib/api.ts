@@ -208,11 +208,17 @@ export async function login(role: Role): Promise<{ token: string; user: ApiUser 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   const raw = await apiFetch<Record<string, unknown>>("/api/dashboard/summary");
   return {
-    avgTemp: num(raw.avgTemp ?? raw.avg_temp ?? raw.averageTemp),
+    avgTemp: num(
+      raw.avgTemp ?? raw.avg_temp ?? raw.averageTemp ?? raw.avgTemperature ?? raw.avg_temperature,
+    ),
     avgHumidity: num(raw.avgHumidity ?? raw.avg_humidity ?? raw.averageHumidity),
     activeAlerts: num(raw.activeAlerts ?? raw.active_alerts, 0) ?? 0,
-    criticalAlerts: num(raw.criticalAlerts ?? raw.critical_alerts, 0) ?? 0,
-    highAlerts: num(raw.highAlerts ?? raw.high_alerts, 0) ?? 0,
+    criticalAlerts:
+      num(
+        raw.criticalAlerts ?? raw.critical_alerts ?? raw.criticalCount ?? raw.critical_count,
+        0,
+      ) ?? 0,
+    highAlerts: num(raw.highAlerts ?? raw.high_alerts ?? raw.highCount ?? raw.high_count, 0) ?? 0,
     systemStatus: str(raw.systemStatus ?? raw.system_status ?? raw.status, "Unknown"),
     lastSync: (raw.lastSync ?? raw.last_sync ?? null) as string | null,
     totalSensors: num(raw.totalSensors ?? raw.total_sensors) ?? undefined,
