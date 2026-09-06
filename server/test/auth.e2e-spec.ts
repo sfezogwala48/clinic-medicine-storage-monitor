@@ -9,8 +9,6 @@ process.env.DATABASE_PATH ??= ":memory:";
 // Credential tests need the same secrets the server requires at boot.
 process.env.JWT_SECRET ??= "e2e-test-secret-change-me";
 process.env.SEED_ADMIN_PASSWORD ??= "Admin123!";
-process.env.SEED_SUPERVISOR_PASSWORD ??= "Supervisor123!";
-process.env.SEED_STAFF_PASSWORD ??= "Staff123!";
 
 describe("Auth (e2e)", () => {
   let app: INestApplication;
@@ -72,9 +70,20 @@ describe("Auth (e2e)", () => {
   });
 
   it("restricts user creation to admins", async () => {
+    const adminFirst = await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .send({ identifier: "admin@clinic.co.za", password: "Admin123!" })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post("/api/users")
+      .set("Authorization", `Bearer ${adminFirst.body.token as string}`)
+      .send({ name: "E2E Staff", contact: "+27000000001", password: "Staff1234!" })
+      .expect(201);
+
     const staff = await request(app.getHttpServer())
       .post("/api/auth/login")
-      .send({ identifier: "+27730000000", password: "Staff123!" })
+      .send({ identifier: "+27000000001", password: "Staff1234!" })
       .expect(200);
 
     await request(app.getHttpServer())
@@ -98,9 +107,20 @@ describe("Auth (e2e)", () => {
   });
 
   it("supports password change + login with the new password", async () => {
+    const adminFirst = await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .send({ identifier: "admin@clinic.co.za", password: "Admin123!" })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post("/api/users")
+      .set("Authorization", `Bearer ${adminFirst.body.token as string}`)
+      .send({ name: "E2E Staff", contact: "+27000000002", password: "Staff123!" })
+      .expect(201);
+
     const login = await request(app.getHttpServer())
       .post("/api/auth/login")
-      .send({ identifier: "+27730000000", password: "Staff123!" })
+      .send({ identifier: "+27000000002", password: "Staff123!" })
       .expect(200);
     const token = login.body.token as string;
 
@@ -112,7 +132,7 @@ describe("Auth (e2e)", () => {
 
     await request(app.getHttpServer())
       .post("/api/auth/login")
-      .send({ identifier: "+27730000000", password: "BrandNew123!" })
+      .send({ identifier: "+27000000002", password: "BrandNew123!" })
       .expect(200);
   });
 });

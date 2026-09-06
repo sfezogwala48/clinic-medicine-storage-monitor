@@ -1,102 +1,21 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { AppLogger } from "../core/logger/app-logger.service.js";
 import { ActuatorEntity } from "./actuator.entity.js";
 import type { UpdateSensorDto } from "./sensor.dto.js";
 import { SensorEntity } from "./sensor.entity.js";
-
-const SEED_SENSORS: SensorEntity[] = [
-  {
-    id: "SEN001",
-    type: "Temp/Humidity",
-    location: "Medicine Storage Room A",
-    model: "SHT31",
-    status: "Active",
-    container: "Cold Room A",
-    lastSeenAt: null,
-  },
-  {
-    id: "SEN002",
-    type: "Temp/Humidity",
-    location: "Medicine Storage Room A",
-    model: "SHT31",
-    status: "Active",
-    container: "Fridge A1",
-    lastSeenAt: null,
-  },
-  {
-    id: "SEN003",
-    type: "Temp/Humidity",
-    location: "Vaccine Fridge Room",
-    model: "DS18B20",
-    status: "Active",
-    container: "Vaccine Fridge",
-    lastSeenAt: null,
-  },
-  {
-    id: "SEN004",
-    type: "Temp/Humidity",
-    location: "Pharmacy Store",
-    model: "SHT31",
-    status: "Active",
-    container: "Shelf B",
-    lastSeenAt: null,
-  },
-  {
-    id: "SEN005",
-    type: "Magnetic Door",
-    location: "Medicine Storage Room A",
-    model: "MC-38",
-    status: "Active",
-    container: "Medicine Cabinet A",
-    lastSeenAt: null,
-  },
-  {
-    id: "SEN006",
-    type: "Magnetic Door",
-    location: "Vaccine Fridge Room",
-    model: "MC-38",
-    status: "Active",
-    container: "Vaccine Container",
-    lastSeenAt: null,
-  },
-];
-
-const SEED_ACTUATORS: ActuatorEntity[] = [
-  {
-    id: "BUZ-A",
-    kind: "Buzzer",
-    location: "Medicine Storage Room A",
-    status: "Active",
-    lastSeenAt: null,
-  },
-  {
-    id: "BUZ-VAC",
-    kind: "Buzzer",
-    location: "Vaccine Fridge Room",
-    status: "Active",
-    lastSeenAt: null,
-  },
-];
 
 @Injectable()
 export class SensorsService {
   constructor(
     @InjectRepository(SensorEntity) private readonly sensors: Repository<SensorEntity>,
     @InjectRepository(ActuatorEntity) private readonly actuators: Repository<ActuatorEntity>,
-    private readonly logger: AppLogger,
   ) {}
 
+  /** Registry starts empty: sensors and actuators are onboarded
+   * through POST /api/sensors or auto-provisioned on first telemetry. */
   async seed(): Promise<void> {
-    if ((await this.sensors.count()) === 0) {
-      await this.sensors.save(SEED_SENSORS);
-      this.logger.log(`Seeded ${SEED_SENSORS.length} sensors`, "Sensors");
-    }
-    if ((await this.actuators.count()) === 0) {
-      await this.actuators.save(SEED_ACTUATORS);
-      this.logger.log(`Seeded ${SEED_ACTUATORS.length} actuators`, "Sensors");
-    }
+    return;
   }
 
   listSensors(type?: string, status?: string): Promise<SensorEntity[]> {

@@ -79,8 +79,6 @@ async function main(): Promise<void> {
   }
   ensureKv(".env", "JWT_SECRET", randomBytes(48).toString("base64url"));
   ensureKv(".env", "SEED_ADMIN_PASSWORD", "Admin123!");
-  ensureKv(".env", "SEED_SUPERVISOR_PASSWORD", "Supervisor123!");
-  ensureKv(".env", "SEED_STAFF_PASSWORD", "Staff123!");
 
   mkdirSync("data", { recursive: true });
 
