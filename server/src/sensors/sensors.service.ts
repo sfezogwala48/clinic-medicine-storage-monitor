@@ -1,8 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AppLogger } from "../core/logger/app-logger.service.js";
 import { ActuatorEntity } from "./actuator.entity.js";
+import type { UpdateSensorDto } from "./sensor.dto.js";
 import { SensorEntity } from "./sensor.entity.js";
 
 const SEED_SENSORS: SensorEntity[] = [
@@ -110,6 +111,50 @@ export class SensorsService {
 
   findSensor(id: string): Promise<SensorEntity | null> {
     return this.sensors.findOne({ where: { id } });
+  }
+
+  async getSensor(id: string): Promise<SensorEntity> {
+    const sensor = await this.findSensor(id);
+    if (!sensor) throw new NotFoundException(`Sensor ${id} not found`);
+    return sensor;
+  }
+
+  async createSensor(input: {
+    id: string;
+    type: string;
+    location: string;
+    model: string;
+    status?: string;
+    container?: string;
+  }): Promise<SensorEntity> {
+    if (await this.findSensor(input.id)) {
+      throw new ConflictException(`Sensor ${input.id} already exists`);
+    }
+    return this.sensors.save({
+      id: input.id,
+      type: input.type as SensorEntity["type"],
+      location: input.location,
+      model: input.model,
+      status: (input.status ?? "Active") as SensorEntity["status"],
+      container: input.container ?? null,
+      lastSeenAt: null,
+    });
+  }
+
+  async updateSensor(id: string, patch: UpdateSensorDto): Promise<SensorEntity> {
+    const sensor = await this.getSensor(id);
+    if (patch.location !== undefined) sensor.location = patch.location;
+    if (patch.model !== undefined) sensor.model = patch.model;
+    // Values are validated by UpdateSensorDto (IsIn) before reaching here.
+    if (patch.status !== undefined) sensor.status = patch.status as SensorEntity["status"];
+    if (patch.container !== undefined) sensor.container = patch.container;
+    return this.sensors.save(sensor);
+  }
+
+  /** Removes the registry entry. Historical readings keep the sensorId string. */
+  async deleteSensor(id: string): Promise<void> {
+    const sensor = await this.getSensor(id);
+    await this.sensors.remove(sensor);
   }
 
   /** Ensure a sensor row exists for an unknown device id (auto-provision as climate sensor). */
