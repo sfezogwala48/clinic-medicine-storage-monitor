@@ -1,6 +1,8 @@
+import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -10,43 +12,91 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ACCESS_LOG } from "@/data/clinic";
+import { FALLBACK, formatTime, getAccessLog, useApiQuery } from "@/lib/api";
 
 export const Route = createFileRoute("/access")({ component: AccessPage });
 
+const LIMITS = [10, 25, 50, 100, 200];
+
 function AccessPage() {
+  const [limit, setLimit] = React.useState(50);
+  const log = useApiQuery(() => getAccessLog(limit), FALLBACK.access, {
+    deps: [limit],
+    pollMs: 15_000,
+  });
+
   return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Timestamp</TableHead>
-              <TableHead>Container</TableHead>
-              <TableHead>Sensor ID</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Reason</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {ACCESS_LOG.map((log) => (
-              <TableRow key={log.id}>
-                <TableCell>2026-06-02 {log.time}</TableCell>
-                <TableCell className="font-semibold">{log.container}</TableCell>
-                <TableCell>{log.sensorId}</TableCell>
-                <TableCell>{log.duration}</TableCell>
-                <TableCell>{log.reason}</TableCell>
-                <TableCell>
-                  <Badge variant={log.open ? "warning" : "secondary"}>
-                    {log.open ? "Open" : "Closed"}
-                  </Badge>
-                </TableCell>
-              </TableRow>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Newest first · durations pre-formatted by the server (<code>"5m"</code>, <code>"-"</code>{" "}
+          for close events).
+          {!log.live && !log.loading && " Showing cached data — backend unreachable."}
+        </p>
+        <div className="flex items-center gap-2">
+          <label htmlFor="access-limit" className="text-sm text-muted-foreground">
+            Limit
+          </label>
+          <select
+            id="access-limit"
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+          >
+            {LIMITS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
             ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+          </select>
+          <Button size="sm" variant="outline" onClick={log.refresh}>
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Timestamp</TableHead>
+                <TableHead>Container</TableHead>
+                <TableHead>Sensor ID</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {log.loading && log.data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    Loading access log…
+                  </TableCell>
+                </TableRow>
+              ) : (
+                log.data.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="whitespace-nowrap tabular-nums">
+                      {formatTime(entry.time)}
+                    </TableCell>
+                    <TableCell className="font-semibold">{entry.container}</TableCell>
+                    <TableCell className="font-mono">{entry.sensorId}</TableCell>
+                    <TableCell className="tabular-nums">{entry.duration}</TableCell>
+                    <TableCell>{entry.reason}</TableCell>
+                    <TableCell>
+                      <Badge variant={entry.open ? "warning" : "secondary"}>
+                        {entry.open ? "Open" : "Closed"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

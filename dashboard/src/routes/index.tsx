@@ -1,11 +1,21 @@
+import * as React from "react";
 import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Droplets, Thermometer, TriangleAlert, Wifi } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { ACCESS_LOG, TEMPERATURE_TREND_24H, activeAlerts } from "@/data/clinic";
+import {
+  FALLBACK,
+  formatTime,
+  getAccessLog,
+  getDashboardSummary,
+  getTemperatureTrend,
+  useApiQuery,
+  type TrendResponse,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({ component: DashboardPage });
@@ -61,28 +71,30 @@ function StatCard({
 const CHART_W = 600;
 const CHART_H = 220;
 const PAD = { top: 16, right: 12, bottom: 28, left: 36 };
-const DOMAIN_MIN = 20;
-const DOMAIN_MAX = 27;
 const THRESHOLD = 25;
 
-function TempTrendChart({ data }: { data: number[] }) {
+function TempTrendChart({ trend, fallback }: { trend: TrendResponse | null; fallback: number[] }) {
+  const values = trend && trend.points.length > 0 ? trend.points.map((p) => p.temp) : fallback;
+  const min = Math.min(...values, THRESHOLD - 2);
+  const max = Math.max(...values, THRESHOLD + 2);
+  const span = Math.max(max - min, 1);
   const innerW = CHART_W - PAD.left - PAD.right;
   const innerH = CHART_H - PAD.top - PAD.bottom;
-  const x = (i: number) => PAD.left + (i / (data.length - 1)) * innerW;
-  const y = (v: number) => PAD.top + (1 - (v - DOMAIN_MIN) / (DOMAIN_MAX - DOMAIN_MIN)) * innerH;
+  const x = (i: number) => PAD.left + (i / Math.max(values.length - 1, 1)) * innerW;
+  const y = (v: number) => PAD.top + (1 - (v - min) / span) * innerH;
 
-  const line = data
+  const line = values
     .map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`)
     .join(" ");
-  const area = `${line} L${x(data.length - 1).toFixed(1)},${(PAD.top + innerH).toFixed(1)} L${PAD.left},${(PAD.top + innerH).toFixed(1)} Z`;
-  const ticks = [20, 22, 24, 26];
+  const area = `${line} L${x(values.length - 1).toFixed(1)},${(PAD.top + innerH).toFixed(1)} L${PAD.left},${(PAD.top + innerH).toFixed(1)} Z`;
+  const ticks = [min, (min + max) / 2, max].map((t) => Math.round(t * 10) / 10);
 
   return (
     <svg
       viewBox={`0 0 ${CHART_W} ${CHART_H}`}
       className="h-56 w-full"
       role="img"
-      aria-label="Temperature trend over the last 24 hours"
+      aria-label="Temperature trend"
     >
       <defs>
         <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
@@ -143,17 +155,17 @@ function TempTrendChart({ data }: { data: number[] }) {
         strokeLinejoin="round"
       />
 
-      {data.map((v, i) => (
+      {values.map((v, i) => (
         <g key={i}>
           <circle
             cx={x(i)}
             cy={y(v)}
-            r={v > THRESHOLD - 1 ? 4.5 : 3.5}
+            r={v >= THRESHOLD ? 4.5 : 3.5}
             fill={v >= THRESHOLD ? "var(--color-destructive)" : "var(--color-primary)"}
             stroke="var(--color-card)"
             strokeWidth="2"
           >
-            <title>{`${v}°C`}</title>
+            <title>{`${v}°C${trend?.points[i]?.time ? ` @ ${trend.points[i].time}` : ""}`}</title>
           </circle>
           {(i % 2 === 0 || v >= THRESHOLD) && (
             <text
@@ -163,7 +175,9 @@ function TempTrendChart({ data }: { data: number[] }) {
               fontSize="11"
               fill="var(--color-muted-foreground)"
             >
-              {String(i * 2).padStart(2, "0")}:00
+              {trend?.points[i]?.time
+                ? formatTime(trend.points[i].time).slice(-8, -3) || trend.points[i].time
+                : `${String(i * 2).padStart(2, "0")}:00`}
             </text>
           )}
         </g>
@@ -172,50 +186,142 @@ function TempTrendChart({ data }: { data: number[] }) {
   );
 }
 
+const TREND_SENSORS = ["SEN001", "SEN002", "SEN003"];
+
 function DashboardPage() {
-  const alerts = activeAlerts();
+  const [trendSensor, setTrendSensor] = React.useState("SEN001");
+  const [trendRange, setTrendRange] = React.useState<"24h" | "7d">("24h");
+
+  const summary = useApiQuery(
+    getDashboardSummary,
+    {
+      avgTemp: 22.5,
+      avgHumidity: 45.2,
+      activeAlerts: 2,
+      criticalAlerts: 1,
+      highAlerts: 1,
+      systemStatus: "Online",
+      lastSync: "just now",
+    },
+    { pollMs: 15_000 },
+  );
+  const trend = useApiQuery(
+    () => getTemperatureTrend(trendSensor, trendRange),
+    {
+      unit: "°C",
+      intervalMinutes: 120,
+      limit: 12,
+      points: FALLBACK.trendValues.map((temp) => ({ time: "", temp })),
+    },
+    { deps: [trendSensor, trendRange], pollMs: 30_000 },
+  );
+  const access = useApiQuery(() => getAccessLog(3), FALLBACK.access.slice(0, 3), {
+    pollMs: 15_000,
+  });
+
+  const s = summary.data;
+  const online =
+    s.systemStatus.toLowerCase().includes("on") ||
+    s.systemStatus.toLowerCase().includes("ok") ||
+    s.systemStatus === "Online";
 
   return (
     <div className="space-y-6">
+      {!summary.live && !summary.loading && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="py-3 text-sm text-muted-foreground">
+            Backend unreachable ({summary.error ?? "connection failed"}) — showing seeded demo data.
+            Start the server + MQTT broker per <code>reference/USAGE.md</code> §4 and publish
+            telemetry to populate live readings.{" "}
+            <Button size="sm" variant="outline" className="ml-2" onClick={summary.refresh}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<Thermometer className="h-4 w-4" />}
           title="Avg Temperature"
-          value="22.5°C"
-          sub="Room A above 25° limit"
-          tone="warning"
+          value={s.avgTemp == null ? "--" : `${s.avgTemp.toFixed(1)}°C`}
+          sub={s.avgTemp != null && s.avgTemp > 25 ? "Above 25° room limit" : "Within safe range"}
+          tone={s.avgTemp != null && s.avgTemp > 25 ? "warning" : "success"}
         />
         <StatCard
           icon={<Droplets className="h-4 w-4" />}
           title="Avg Humidity"
-          value="45.2%"
-          sub="Within safe range (30–60%)"
+          value={s.avgHumidity == null ? "--" : `${s.avgHumidity.toFixed(1)}%`}
+          sub="Safe range 30–60%"
           tone="success"
         />
         <StatCard
           icon={<TriangleAlert className="h-4 w-4" />}
           title="Active Alerts"
-          value={String(alerts.length)}
-          sub="1 Critical, 1 High"
-          tone="danger"
+          value={String(s.activeAlerts)}
+          sub={`${s.criticalAlerts} Critical, ${s.highAlerts} High`}
+          tone={s.activeAlerts > 0 ? "danger" : "success"}
         />
         <StatCard
           icon={<Wifi className="h-4 w-4" />}
           title="System Status"
-          value="Online"
-          sub="Last sync: just now"
-          tone="primary"
+          value={s.systemStatus}
+          sub={`Last sync: ${s.lastSync ? formatTime(s.lastSync) : "just now"}${summary.live ? "" : " (cached)"}`}
+          tone={online ? "primary" : "danger"}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="pb-0">
-            <CardTitle className="text-base">Temperature Trend</CardTitle>
-            <CardDescription>Medicine Storage Room A &mdash; last 24 hours</CardDescription>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">Temperature Trend</CardTitle>
+                <CardDescription>
+                  {trendSensor} — last {trendRange} ({trend.data.unit}, every{" "}
+                  {trend.data.intervalMinutes || "--"} min)
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  aria-label="Trend sensor"
+                  value={trendSensor}
+                  onChange={(e) => setTrendSensor(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                >
+                  {TREND_SENSORS.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex overflow-hidden rounded-md border border-input text-sm">
+                  {(["24h", "7d"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setTrendRange(r)}
+                      className={cn(
+                        "px-2.5 py-1",
+                        trendRange === r ? "bg-primary text-primary-foreground" : "bg-background",
+                      )}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <TempTrendChart data={TEMPERATURE_TREND_24H} />
+            {trend.loading && trend.data.points.length === 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">Loading trend…</p>
+            ) : (
+              <TempTrendChart
+                trend={trend.live ? trend.data : null}
+                fallback={FALLBACK.trendValues}
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -227,10 +333,10 @@ function DashboardPage() {
           <CardContent className="px-2 pb-2">
             <Table>
               <TableBody>
-                {ACCESS_LOG.slice(0, 3).map((log) => (
+                {access.data.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell>
-                      <div className="font-semibold tabular-nums">{log.time}</div>
+                      <div className="font-semibold tabular-nums">{formatTime(log.time)}</div>
                       <div className="text-xs text-muted-foreground">{log.container}</div>
                     </TableCell>
                     <TableCell className="text-right">

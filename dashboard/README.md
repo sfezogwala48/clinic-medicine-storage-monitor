@@ -52,5 +52,24 @@ The layout (sidebar, header, login gate, theme) lives in
 - Dialog/Sheet/overlay portals mount to `document.body`; a `#portal-root`
   node is reserved in the root layout.
 
-Mock telemetry and users live in `src/data/clinic.ts` (values transcribed
-from `reference/dashboard.html`).
+## Backend API (`reference/USAGE.md`)
+
+All pages fetch live data from the Nest server (default
+`VITE_API_BASE_URL=http://localhost:3000`, see `.env.example`) and fall back
+to seeded demo data when the backend/broker is unreachable:
+
+| Page        | Endpoints used                                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Dashboard   | `GET /api/dashboard/summary`, `GET /api/temperature-trend?sensorId=&range=24h\|7d`, `GET /api/access-log?limit=3`       |
+| Real-Time   | `GET /api/sensors`, `GET /api/readings`                                                                                 |
+| Access      | `GET /api/access-log?limit=`                                                                                            |
+| Alerts      | `GET /api/alerts?status=Active`, `PATCH /api/alerts/:id/acknowledge`, `GET /api/notifications?alertId=`                 |
+| Reports     | `GET /api/reports/summary`, `GET /api/reports`, `GET /api/reports/:name` (download)                                     |
+| Settings    | `GET/PUT /api/thresholds`, `GET/PUT /api/notification-settings`                                                         |
+| Users       | `GET/POST /api/users`, `GET /api/audit-trail?limit=100`                                                                 |
+| Login/shell | `POST /api/auth/login {"role"}` → demo `Bearer` token; header badge polls `GET /health/ready` for Live/Demo-cache state |
+
+Shared client, tolerant normalizers, ISO-8601 formatters and the
+polling-with-fallback hook live in `src/lib/api.ts`. Seeded fallback values
+in `src/data/clinic.ts` match the server demo seed (`SEN001–SEN004` climate,
+`SEN005–SEN006` door, `BUZ-A`/`BUZ-VAC`).

@@ -11,10 +11,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getReports, getReportsSummary, reportDownloadUrl, useApiQuery } from "@/lib/api";
 
 export const Route = createFileRoute("/reports")({ component: ReportsPage });
 
+const FALLBACK_SUMMARY = { complianceScore: 98, accessTotal: 42, wastePrevented: "R 12,500" };
+const FALLBACK_FILES = [
+  {
+    name: "Daily_Report_2026-06-01.pdf",
+    size: "2.4 MB",
+    downloadUrl: "/api/reports/Daily_Report_2026-06-01.pdf",
+  },
+  {
+    name: "Weekly_Compliance_Wk22.pdf",
+    size: "5.1 MB",
+    downloadUrl: "/api/reports/Weekly_Compliance_Wk22.pdf",
+  },
+];
+
 function ReportsPage() {
+  const summary = useApiQuery(getReportsSummary, FALLBACK_SUMMARY, { pollMs: 60_000 });
+  const files = useApiQuery(getReports, FALLBACK_FILES, { pollMs: 60_000 });
+  const s = summary.data;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
@@ -27,6 +46,11 @@ function ReportsPage() {
         <Button variant="outline">
           <CalendarDays className="h-4 w-4" /> Monthly Compliance
         </Button>
+        {!summary.live && !summary.loading && (
+          <span className="ml-auto self-center text-xs text-muted-foreground">
+            Cached figures — backend unreachable.
+          </span>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -41,9 +65,11 @@ function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-              98%
+              {s.complianceScore}%
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Target: ≥95%</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Target: ≥95% (GET /api/reports/summary)
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -56,8 +82,8 @@ function ReportsPage() {
             </span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tracking-tight">42</div>
-            <p className="mt-1 text-xs text-muted-foreground">Last 24 Hours</p>
+            <div className="text-2xl font-bold tracking-tight">{s.accessTotal}</div>
+            <p className="mt-1 text-xs text-muted-foreground">Access total</p>
           </CardContent>
         </Card>
         <Card>
@@ -70,7 +96,7 @@ function ReportsPage() {
             </span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tracking-tight">R 12,500</div>
+            <div className="text-2xl font-bold tracking-tight">{s.wastePrevented}</div>
             <p className="mt-1 text-xs text-muted-foreground">Based on temp excursions caught</p>
           </CardContent>
         </Card>
@@ -90,10 +116,7 @@ function ReportsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[
-                { name: "Daily_Report_2026-06-01.pdf", size: "2.4 MB" },
-                { name: "Weekly_Compliance_Wk22.pdf", size: "5.1 MB" },
-              ].map((report) => (
+              {files.data.map((report) => (
                 <TableRow key={report.name}>
                   <TableCell>
                     <span className="inline-flex items-center gap-2">
@@ -103,9 +126,11 @@ function ReportsPage() {
                   </TableCell>
                   <TableCell>{report.size}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="outline">
-                      <Download className="h-4 w-4" /> Download
-                    </Button>
+                    <a href={reportDownloadUrl(report)} download={report.name}>
+                      <Button size="sm" variant="outline">
+                        <Download className="h-4 w-4" /> Download
+                      </Button>
+                    </a>
                   </TableCell>
                 </TableRow>
               ))}

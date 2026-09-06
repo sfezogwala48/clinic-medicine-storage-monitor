@@ -21,6 +21,14 @@ import { Button } from "@/components/ui/button";
 import { RouterSheet } from "@/components/ui/router-sheet";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Role } from "@/data/clinic";
+import {
+  API_BASE,
+  checkBackend,
+  getToken,
+  login as apiLogin,
+  setStoredUser,
+  setToken,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createRootRoute({
@@ -94,7 +102,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (role: Role) => Promise<void> }) {
   const roles: { value: Role; label: string; hint: string; icon: React.ReactNode }[] = [
     {
       value: "admin",
@@ -116,6 +124,21 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
     },
   ];
 
+  const [pending, setPending] = React.useState<Role | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const handleClick = async (role: Role) => {
+    setPending(role);
+    setError(null);
+    try {
+      await onLogin(role);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Login failed");
+    } finally {
+      setPending(null);
+    }
+  };
+
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-muted/60 p-4">
       <div
@@ -135,20 +158,30 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
             <button
               key={role.value}
               type="button"
-              onClick={() => onLogin(role.value)}
-              className="group flex w-full items-center gap-3 rounded-lg border border-input bg-background px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent"
+              disabled={pending !== null}
+              onClick={() => handleClick(role.value)}
+              className="group flex w-full items-center gap-3 rounded-lg border border-input bg-background px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent disabled:opacity-60"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                 {role.icon}
               </span>
               <span>
-                <span className="block text-sm font-semibold">{role.label}</span>
+                <span className="block text-sm font-semibold">
+                  {role.label}
+                  {pending === role.value ? " — signing in…" : ""}
+                </span>
                 <span className="block text-xs text-muted-foreground">{role.hint}</span>
               </span>
             </button>
           ))}
+          {error && (
+            <p className="rounded-md bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-700 dark:text-amber-300">
+              Server login failed ({error}) — continuing with demo role.
+            </p>
+          )}
           <p className="pt-2 text-center text-[11px] text-muted-foreground">
-            Demo build &mdash; roles switch the visible workspace, no password needed.
+            POST /api/auth/login with {'{"role": "..."}'} returns a demo token; the server also
+            accepts requests without enforcing it.
           </p>
         </CardContent>
       </Card>
@@ -159,6 +192,23 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
 function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
   const pathname = useLocation({ select: (s) => s.pathname });
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const [backendUp, setBackendUp] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    checkBackend().then((up) => {
+      if (!cancelled) setBackendUp(up);
+    });
+    const id = window.setInterval(() => {
+      checkBackend().then((up) => {
+        if (!cancelled) setBackendUp(up);
+      });
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
   const today = React.useMemo(
     () =>
       new Date().toLocaleDateString("en-ZA", {
@@ -218,12 +268,26 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium md:inline-flex">
+            <span
+              title={
+                backendUp === false
+                  ? `Backend unreachable at ${API_BASE} — showing cached demo data`
+                  : `Backend: ${API_BASE}`
+              }
+              className="hidden items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium md:inline-flex"
+            >
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                {backendUp !== false && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                )}
+                <span
+                  className={cn(
+                    "relative inline-flex h-2 w-2 rounded-full",
+                    backendUp === false ? "bg-amber-500" : "bg-emerald-500",
+                  )}
+                />
               </span>
-              Live
+              {backendUp === null ? "Checking…" : backendUp ? "Live" : "Demo cache"}
             </span>
             <span className="hidden text-sm text-muted-foreground lg:inline">{today}</span>
             <ThemeToggle />
@@ -234,7 +298,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
         </header>
 
         <main className={cn("flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6 lg:p-8")}>
-          <div className="mx-auto w-full max-w-6xl">
+          <div className="mx-auto w-full">
             <Outlet />
           </div>
         </main>
@@ -253,15 +317,33 @@ function RootComponent() {
     return saved === "admin" || saved === "supervisor" || saved === "staff" ? saved : null;
   });
 
-  const handleLogin = (next: Role) => {
+  const handleLogin = async (next: Role) => {
     window.localStorage.setItem(ROLE_STORAGE_KEY, next);
+    try {
+      // USAGE.md: POST /api/auth/login {role} → {token, user}; server also
+      // accepts unauthenticated requests, so fall back to demo mode offline.
+      await apiLogin(next);
+    } catch {
+      setToken(`demo-${next}-local`);
+      setStoredUser({ role: next });
+    }
     setRole(next);
   };
 
   const handleLogout = () => {
     window.localStorage.removeItem(ROLE_STORAGE_KEY);
+    setToken(null);
+    setStoredUser(null);
     setRole(null);
   };
+
+  // Keep demo sessions working across restarts even without a stored role.
+  React.useEffect(() => {
+    if (!role && getToken()) {
+      const saved = window.localStorage.getItem(ROLE_STORAGE_KEY);
+      if (saved === "admin" || saved === "supervisor" || saved === "staff") setRole(saved);
+    }
+  }, [role]);
 
   return (
     <ThemeProvider>
