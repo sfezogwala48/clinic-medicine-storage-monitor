@@ -5,7 +5,7 @@
   "description": "Clinic medicine storage monitor — Vite+ monorepo (server + dashboard + mqtt-tester)",
   "type": "module",
   "scripts": {
-    "dev": "vp run --parallel server#dev dashboard#dev",
+    "dev": "vp run --parallel --filter server --filter dashboard dev",
     "dev:server": "vp run server#dev",
     "dev:dashboard": "vp run dashboard#dev",
     "build": "vp run -r build",
@@ -16,6 +16,7 @@
     "ready": "vp check && vp run -r test && vp run -r build"
   },
   "devDependencies": {
+    "concurrently": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },

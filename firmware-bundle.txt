@@ -1,0 +1,735 @@
+===== FILE: firmware/config.py =====
+"""Device configuration for the clinic medicine storage monitor firmware.
+
+Edit this file only. Everything else (main.py, net.py, umqtt/) is generic.
+
+Set ROLE to one of:
+  "storage"  - fridge/freezer unit sensor (DHT22/DHT11) -> clinic/storage/<id>/telemetry
+  "climate"  - ambient climate sensor (DHT22/DHT11)    -> clinic/sensors/<id>/telemetry/climate
+  "door"     - reed switch on a storage unit door       -> clinic/sensors/<id>/telemetry/door
+  "buzzer"   - alarm buzzer actuator (server-controlled) -> subscribes to clinic/actuators/<id>/commands/buzzer
+
+Flash MicroPython on a Raspberry Pi Pico W first (see README.md).
+"""
+
+# ---------------------------------------------------------------------------
+# Role / identity
+# ---------------------------------------------------------------------------
+# "storage" | "climate" | "door" | "buzzer"
+ROLE = "storage"
+
+# Device / sensor ID as shown on the dashboard. One firmware = one identity.
+# Examples: "FRIDGE-01", "SEN003", "ACT001"
+DEVICE_ID = "FRIDGE-01"
+SENSOR_ID = DEVICE_ID          # used by climate/door roles
+ACTUATOR_ID = DEVICE_ID        # used by the buzzer role
+
+# ---------------------------------------------------------------------------
+# WiFi (Pico W onboard CYW43 radio)
+# ---------------------------------------------------------------------------
+WIFI_SSID = "YOUR_WIFI_SSID"
+WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"
+
+# ---------------------------------------------------------------------------
+# MQTT broker (the NestJS server subscribes here; defaults match compose.yaml)
+# ---------------------------------------------------------------------------
+MQTT_BROKER = "192.168.1.10"   # IP of the machine running `server/` (not "localhost"!)
+MQTT_PORT = 1883
+MQTT_USER = None               # set to a string if mosquitto requires auth
+MQTT_PASSWORD = None
+
+# Keepalive in seconds. umqtt does not send automatic PINGREQs, so 0 (disabled)
+# is the safe default; the broker will not age the connection out.
+MQTT_KEEPALIVE = 0
+
+# ---------------------------------------------------------------------------
+# Sensors / actuators (GPIO pins, BCM numbering)
+# ---------------------------------------------------------------------------
+# DHT22 (AM2302) or DHT11 temperature + humidity sensor. Used by the
+# "storage" and "climate" roles.
+SENSOR_TYPE = "dht22"          # "dht22" | "dht11"
+DHT_PIN = 15                   # data pin; 4.7k-10k pull-up between DATA and 3V3
+
+# Reed / magnetic door switch for the "door" role. Wire the switch between
+# the pin and GND; the internal pull-up keeps the pin HIGH while the door is
+# open (magnet away, switch open).
+DOOR_PIN = 14
+DOOR_CLOSED_WHEN_LOW = True    # switch closed (LOW) = door closed. Flip if yours differs.
+DOOR_DEBOUNCE_MS = 80
+DOOR_HEARTBEAT_S = 300         # re-publish current state this often even if unchanged
+
+# Active buzzer (or relay driving a siren) for the "buzzer" role.
+# HIGH = sounding.
+BUZZER_PIN = 13
+
+# ---------------------------------------------------------------------------
+# Timing
+# ---------------------------------------------------------------------------
+READ_INTERVAL_S = 10           # seconds between telemetry publishes
+WIFI_TIMEOUT_S = 20
+RECONNECT_DELAY_S = 5
+
+===== FILE: firmware/net.py =====
+"""WiFi / clock helpers for the clinic medicine storage monitor firmware.
+
+MicroPython for Raspberry Pi Pico W. Kept separate from main.py so the role
+logic stays readable.
+"""
+
+import time
+
+import config
+
+
+def connect_wifi():
+    """Connect (or verify the connection) and return the WLAN object.
+
+    Raises OSError on timeout so callers can retry after config.RECONNECT_DELAY_S.
+    """
+    import network
+
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if not wlan.isconnected():
+        print("wifi: connecting to %r ..." % config.WIFI_SSID)
+        wlan.disconnect()
+        wlan.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
+        deadline = time.time() + config.WIFI_TIMEOUT_S
+        while not wlan.isconnected():
+            if time.time() > deadline:
+                raise OSError("wifi: could not connect within %ds" % config.WIFI_TIMEOUT_S)
+            time.sleep(0.25)
+    print("wifi: connected, ip=%s" % wlan.ifconfig()[0])
+    return wlan
+
+
+def wifi_ok():
+    import network
+
+    return network.WLAN(network.STA_IF).isconnected()
+
+
+def sync_clock():
+    """Best-effort NTP sync so `recordedAt` timestamps are real UTC.
+
+    MicroPython boots with the epoch at 2021-01-01, so without this the
+    timestamps are wrong until the first successful sync. Retries a few
+    times; failure is non-fatal (the server also stamps arrival time).
+    """
+    for attempt in range(3):
+        try:
+            import ntptime
+
+            ntptime.settime()
+            print("clock: NTP sync ok (%s)" % iso_utc())
+            return True
+        except Exception as e:  # DNS/DHCP can lag right after boot
+            print("clock: NTP attempt %d failed: %r" % (attempt + 1, e))
+            time.sleep(2)
+    return False
+
+
+def iso_utc():
+    """UTC timestamp in the exact format the server ingests: 2026-01-31T12:00:00Z."""
+    t = time.gmtime()
+    return "%04d-%02d-%02dT%02d:%02d:%02dZ" % t[:6]
+
+===== FILE: firmware/main.py =====
+"""Clinic medicine storage monitor - generic Raspberry Pi Pico W firmware.
+
+One binary (MicroPython), four roles selected in config.py:
+
+  storage  publishes {deviceId, temperatureC, humidityPct, recordedAt}
+           to clinic/storage/<DEVICE_ID>/telemetry
+  climate  publishes {sensorId, temp, humidity, recordedAt}
+           to clinic/sensors/<SENSOR_ID>/telemetry/climate
+  door     publishes {sensorId, containerOpen, recordedAt}
+           to clinic/sensors/<SENSOR_ID>/telemetry/door on change + heartbeat
+  buzzer   subscribes to clinic/actuators/<ACTUATOR_ID>/commands/buzzer,
+           drives the buzzer pin, acks on clinic/actuators/<ACTUATOR_ID>/status
+
+Topics and payloads mirror server/src/mqtt/mqtt.options.ts and
+server/src/notifications/notification.dto.ts. Sensor roles publish a
+retained online status on connect and register a retained offline last-will
+so the server's clinic/sensors/<id>/status handler sees both edges.
+
+Behavior on failure: umqtt.robust reconnects the MQTT session on its own; if
+WiFi itself drops (OSError bubbles up), main() re-establishes WiFi and
+rebuilds the session. The device never needs a reset to recover.
+"""
+
+import json
+import time
+
+import config
+import machine
+from net import connect_wifi, iso_utc, sync_clock, wifi_ok
+from umqtt.robust import MQTTClient
+
+# ---------------------------------------------------------------------------
+# Role constants (match config.ROLE)
+# ---------------------------------------------------------------------------
+ROLE_STORAGE = "storage"
+ROLE_CLIMATE = "climate"
+ROLE_DOOR = "door"
+ROLE_BUZZER = "buzzer"
+
+LED = machine.Pin("LED", machine.Pin.OUT)
+
+
+def log(*args):
+    print("[%s]" % config.DEVICE_ID, *args)
+
+
+def blink(n=1, ms=80):
+    for _ in range(n):
+        LED.on()
+        time.sleep_ms(ms)
+        LED.off()
+        if n > 1:
+            time.sleep_ms(ms)
+
+
+def dumps(payload):
+    return json.dumps(payload)
+
+
+def sensor_status_topic():
+    return "clinic/sensors/%s/status" % config.SENSOR_ID
+
+
+def actuator_status_topic():
+    return "clinic/actuators/%s/status" % config.ACTUATOR_ID
+
+
+def make_client():
+    """Build + connect the MQTT session for the configured role."""
+    client = MQTTClient(
+        "pico-%s-%s" % (config.ROLE, config.DEVICE_ID),
+        config.MQTT_BROKER,
+        config.MQTT_PORT,
+        user=config.MQTT_USER,
+        password=config.MQTT_PASSWORD,
+        keepalive=config.MQTT_KEEPALIVE,
+    )
+    client.DEBUG = True
+
+    if config.ROLE != ROLE_BUZZER:
+        # Retained last-will: if the device dies, the server flips it offline.
+        client.set_last_will(
+            sensor_status_topic(), dumps({"online": False}), retain=True, qos=0
+        )
+
+    client.connect(clean_session=False)
+    log("mqtt: connected to %s:%s as %s (%s role)" % (
+        config.MQTT_BROKER, config.MQTT_PORT, client.client_id, config.ROLE))
+    return client
+
+
+def publish_online(client):
+    if config.ROLE != ROLE_BUZZER:
+        client.publish(
+            sensor_status_topic().encode(),
+            dumps({"online": True}).encode(),
+            retain=True,
+            qos=0,
+        )
+    blink(2)
+
+
+# ---------------------------------------------------------------------------
+# DHT22 / DHT11 reading (storage + climate roles)
+# ---------------------------------------------------------------------------
+_dht = None
+
+
+def dht_sensor():
+    global _dht
+    if _dht is None:
+        import dht
+
+        cls = dht.DHT11 if config.SENSOR_TYPE == "dht11" else dht.DHT22
+        _dht = cls(machine.Pin(config.DHT_PIN))
+    return _dht
+
+
+def read_temp_humidity():
+    """Return (temp_c, humidity_pct) or None after 3 failed measures."""
+    sensor = dht_sensor()
+    for attempt in range(3):
+        try:
+            sensor.measure()
+            return sensor.temperature(), sensor.humidity()
+        except OSError as e:
+            log("dht: measure failed (%r), attempt %d/3" % (e, attempt + 1))
+            time.sleep(2)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Role: storage (clinic/storage/<id>/telemetry)
+# ---------------------------------------------------------------------------
+def run_storage(client):
+    while True:
+        reading = read_temp_humidity()
+        if reading is not None:
+            temp_c, humidity = reading
+            payload = {
+                "deviceId": config.DEVICE_ID,
+                "temperatureC": round(temp_c, 1),
+                "humidityPct": round(humidity, 1),
+                "recordedAt": iso_utc(),
+            }
+            topic = "clinic/storage/%s/telemetry" % config.DEVICE_ID
+            client.publish(topic.encode(), dumps(payload).encode(), qos=0)
+            log("-> %s %s" % (topic, payload))
+        else:
+            log("dht: no reading this cycle")
+        time.sleep(config.READ_INTERVAL_S)
+
+
+# ---------------------------------------------------------------------------
+# Role: climate (clinic/sensors/<id>/telemetry/climate)
+# ---------------------------------------------------------------------------
+def run_climate(client):
+    while True:
+        reading = read_temp_humidity()
+        if reading is not None:
+            temp_c, humidity = reading
+            payload = {
+                "sensorId": config.SENSOR_ID,
+                "temp": round(temp_c, 1),
+                "humidity": round(humidity, 1),
+                "recordedAt": iso_utc(),
+            }
+            topic = "clinic/sensors/%s/telemetry/climate" % config.SENSOR_ID
+            client.publish(topic.encode(), dumps(payload).encode(), qos=0)
+            log("-> %s %s" % (topic, payload))
+        else:
+            log("dht: no reading this cycle")
+        time.sleep(config.READ_INTERVAL_S)
+
+
+# ---------------------------------------------------------------------------
+# Role: door (clinic/sensors/<id>/telemetry/door)
+# ---------------------------------------------------------------------------
+def run_door(client):
+    pin = machine.Pin(config.DOOR_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
+    topic = "clinic/sensors/%s/telemetry/door" % config.SENSOR_ID
+
+    def door_open():
+        closed = pin.value() == 0  # LOW = switch closed to GND
+        if config.DOOR_CLOSED_WHEN_LOW:
+            return not closed
+        return closed
+
+    def publish_state():
+        payload = {
+            "sensorId": config.SENSOR_ID,
+            "containerOpen": door_open(),
+            "recordedAt": iso_utc(),
+        }
+        client.publish(topic.encode(), dumps(payload).encode(), qos=0)
+        log("-> %s %s" % (topic, payload))
+
+    publish_state()  # initial state so the dashboard starts correct
+    last_state = door_open()
+    last_sent = time.ticks_ms()
+
+    while True:
+        time.sleep_ms(20)
+        state = door_open()
+        if state != last_state:
+            time.sleep_ms(config.DOOR_DEBOUNCE_MS)
+            if door_open() == state:  # still the same after debounce
+                publish_state()
+                last_state = state
+                last_sent = time.ticks_ms()
+        elif time.ticks_diff(time.ticks_ms(), last_sent) > config.DOOR_HEARTBEAT_S * 1000:
+            publish_state()
+            last_sent = time.ticks_ms()
+
+
+# ---------------------------------------------------------------------------
+# Role: buzzer (subscribe commands, drive pin, ack)
+# ---------------------------------------------------------------------------
+def run_buzzer(client):
+    buzzer = machine.Pin(config.BUZZER_PIN, machine.Pin.OUT, value=0)
+    cmd_topic = "clinic/actuators/%s/commands/buzzer" % config.ACTUATOR_ID
+    client.set_callback(None)
+    client.subscribe(cmd_topic.encode(), qos=0)
+    log("listening on %s" % cmd_topic)
+
+    def set_buzzer(on):
+        buzzer.value(1 if on else 0)
+        log("buzzer %s" % ("ON" if on else "OFF"))
+
+    def on_command(topic, msg):
+        text = msg.decode()
+        log("<- %s %s" % (topic.decode(), text))
+        try:
+            command = json.loads(text)
+            on = bool(command.get("on", False))
+        except ValueError:
+            on = text.strip().lower() in ("on", "true", "1")
+        set_buzzer(on)
+        # Ack back to the server (handleBuzzerStatus just marks the actuator seen).
+        client.publish(
+            actuator_status_topic().encode(),
+            dumps({"state": "ack", "command": "on" if on else "off"}).encode(),
+            qos=0,
+        )
+
+    client.set_callback(on_command)
+    while True:
+        client.wait_msg()  # blocks until a command arrives; reconnects via robust
+
+
+# ---------------------------------------------------------------------------
+# Main loop with WiFi/MQTT recovery
+# ---------------------------------------------------------------------------
+ROLE_RUNNERS = {
+    ROLE_STORAGE: run_storage,
+    ROLE_CLIMATE: run_climate,
+    ROLE_DOOR: run_door,
+    ROLE_BUZZER: run_buzzer,
+}
+
+
+def run_role_forever():
+    """Create a session and run the role until the connection breaks."""
+    client = make_client()
+    publish_online(client)
+    ROLE_RUNNERS[config.ROLE](client)
+
+
+def main():
+    log("firmware starting: role=%s id=%s" % (config.ROLE, config.DEVICE_ID))
+    connect_wifi()
+    sync_clock()
+
+    runner = ROLE_RUNNERS.get(config.ROLE)
+    if runner is None:
+        raise SystemExit("config.ROLE must be one of %s" % sorted(ROLE_RUNNERS))
+
+    while True:
+        try:
+            run_role_forever()
+        except OSError as e:
+            log("connection lost: %r" % e)
+            buzzer_cleanup()
+        except Exception as e:
+            log("unexpected error: %r" % e)
+            buzzer_cleanup()
+        while not wifi_ok():
+            log("wifi down, retrying in %ds" % config.RECONNECT_DELAY_S)
+            time.sleep(config.RECONNECT_DELAY_S)
+            connect_wifi()
+        time.sleep(config.RECONNECT_DELAY_S)
+
+
+def buzzer_cleanup():
+    """Silence the buzzer if we lose connectivity while it is sounding."""
+    try:
+        machine.Pin(config.BUZZER_PIN, machine.Pin.OUT, value=0)
+    except Exception:
+        pass
+
+
+if __name__ == "__main__":
+    main()
+
+===== FILE: firmware/umqtt/simple.py =====
+import socket
+import struct
+from binascii import hexlify
+
+
+class MQTTException(Exception):
+    pass
+
+
+class MQTTClient:
+    def __init__(
+        self,
+        client_id,
+        server,
+        port=0,
+        user=None,
+        password=None,
+        keepalive=0,
+        ssl=None,
+        ssl_params={},
+    ):
+        if port == 0:
+            port = 8883 if ssl else 1883
+        self.client_id = client_id
+        self.sock = None
+        self.server = server
+        self.port = port
+        self.ssl = ssl
+        self.ssl_params = ssl_params
+        self.pid = 0
+        self.cb = None
+        self.user = user
+        self.pswd = password
+        self.keepalive = keepalive
+        self.lw_topic = None
+        self.lw_msg = None
+        self.lw_qos = 0
+        self.lw_retain = False
+
+    def _send_str(self, s):
+        self.sock.write(struct.pack("!H", len(s)))
+        self.sock.write(s)
+
+    def _recv_len(self):
+        n = 0
+        sh = 0
+        while 1:
+            b = self.sock.read(1)[0]
+            n |= (b & 0x7F) << sh
+            if not b & 0x80:
+                return n
+            sh += 7
+
+    def set_callback(self, f):
+        self.cb = f
+
+    def set_last_will(self, topic, msg, retain=False, qos=0):
+        assert 0 <= qos <= 2
+        assert topic
+        self.lw_topic = topic
+        self.lw_msg = msg
+        self.lw_qos = qos
+        self.lw_retain = retain
+
+    def connect(self, clean_session=True, timeout=None):
+        if self.sock:
+            self.sock.close()
+        self.sock = socket.socket()
+        self.sock.settimeout(timeout)
+        addr = socket.getaddrinfo(self.server, self.port)[0][-1]
+        self.sock.connect(addr)
+        if self.ssl is True:
+            # Legacy support for ssl=True and ssl_params arguments.
+            import ssl
+
+            self.sock = ssl.wrap_socket(self.sock, **self.ssl_params)
+        elif self.ssl:
+            self.sock = self.ssl.wrap_socket(self.sock, server_hostname=self.server)
+        premsg = bytearray(b"\x10\0\0\0\0\0")
+        msg = bytearray(b"\x04MQTT\x04\x02\0\0")
+
+        sz = 10 + 2 + len(self.client_id)
+        msg[6] = clean_session << 1
+        if self.user:
+            sz += 2 + len(self.user) + 2 + len(self.pswd)
+            msg[6] |= 0xC0
+        if self.keepalive:
+            assert self.keepalive < 65536
+            msg[7] |= self.keepalive >> 8
+            msg[8] |= self.keepalive & 0x00FF
+        if self.lw_topic:
+            sz += 2 + len(self.lw_topic) + 2 + len(self.lw_msg)
+            msg[6] |= 0x4 | (self.lw_qos & 0x1) << 3 | (self.lw_qos & 0x2) << 3
+            msg[6] |= self.lw_retain << 5
+
+        i = 1
+        while sz > 0x7F:
+            premsg[i] = (sz & 0x7F) | 0x80
+            sz >>= 7
+            i += 1
+        premsg[i] = sz
+
+        self.sock.write(premsg, i + 2)
+        self.sock.write(msg)
+        # print(hex(len(msg)), hexlify(msg, ":"))
+        self._send_str(self.client_id)
+        if self.lw_topic:
+            self._send_str(self.lw_topic)
+            self._send_str(self.lw_msg)
+        if self.user:
+            self._send_str(self.user)
+            self._send_str(self.pswd)
+        resp = self.sock.read(4)
+        assert resp[0] == 0x20 and resp[1] == 0x02
+        if resp[3] != 0:
+            raise MQTTException(resp[3])
+        return resp[2] & 1
+
+    def disconnect(self):
+        self.sock.write(b"\xe0\0")
+        self.sock.close()
+
+    def ping(self):
+        self.sock.write(b"\xc0\0")
+
+    def publish(self, topic, msg, retain=False, qos=0):
+        pkt = bytearray(b"\x30\0\0\0")
+        pkt[0] |= qos << 1 | retain
+        sz = 2 + len(topic) + len(msg)
+        if qos > 0:
+            sz += 2
+        assert sz < 2097152
+        i = 1
+        while sz > 0x7F:
+            pkt[i] = (sz & 0x7F) | 0x80
+            sz >>= 7
+            i += 1
+        pkt[i] = sz
+        # print(hex(len(pkt)), hexlify(pkt, ":"))
+        self.sock.write(pkt, i + 1)
+        self._send_str(topic)
+        if qos > 0:
+            self.pid += 1
+            pid = self.pid
+            struct.pack_into("!H", pkt, 0, pid)
+            self.sock.write(pkt, 2)
+        self.sock.write(msg)
+        if qos == 1:
+            while 1:
+                op = self.wait_msg()
+                if op == 0x40:
+                    sz = self.sock.read(1)
+                    assert sz == b"\x02"
+                    rcv_pid = self.sock.read(2)
+                    rcv_pid = rcv_pid[0] << 8 | rcv_pid[1]
+                    if pid == rcv_pid:
+                        return
+        elif qos == 2:
+            assert 0
+
+    def subscribe(self, topic, qos=0):
+        assert self.cb is not None, "Subscribe callback is not set"
+        pkt = bytearray(b"\x82\0\0\0")
+        self.pid += 1
+        struct.pack_into("!BH", pkt, 1, 2 + 2 + len(topic) + 1, self.pid)
+        # print(hex(len(pkt)), hexlify(pkt, ":"))
+        self.sock.write(pkt)
+        self._send_str(topic)
+        self.sock.write(qos.to_bytes(1, "little"))
+        while 1:
+            op = self.wait_msg()
+            if op == 0x90:
+                resp = self.sock.read(4)
+                # print(resp)
+                assert resp[1] == pkt[2] and resp[2] == pkt[3]
+                if resp[3] == 0x80:
+                    raise MQTTException(resp[3])
+                return
+
+    def unsubscribe(self, topic):
+        pkt = bytearray(b"\xa2\0\0\0")
+        self.pid += 1
+        struct.pack_into("!BH", pkt, 1, 2 + 2 + len(topic), self.pid)
+        self.sock.write(pkt)
+        self._send_str(topic)
+        while 1:
+            op = self.wait_msg()
+            if op == 0xB0:
+                resp = self.sock.read(3)
+                assert resp[1] == pkt[2] and resp[2] == pkt[3]
+                return
+
+    # Wait for a single incoming MQTT message and process it.
+    # Subscribed messages are delivered to a callback previously
+    # set by .set_callback() method. Other (internal) MQTT
+    # messages processed internally.
+    def wait_msg(self):
+        res = self.sock.read(1)
+        self.sock.setblocking(True)
+        if res is None:
+            return None
+        if res == b"":
+            raise OSError(-1)
+        if res == b"\xd0":  # PINGRESP
+            sz = self.sock.read(1)[0]
+            assert sz == 0
+            return None
+        op = res[0]
+        if op & 0xF0 != 0x30:
+            return op
+        sz = self._recv_len()
+        topic_len = self.sock.read(2)
+        topic_len = (topic_len[0] << 8) | topic_len[1]
+        topic = self.sock.read(topic_len)
+        sz -= topic_len + 2
+        if op & 6:
+            pid = self.sock.read(2)
+            pid = pid[0] << 8 | pid[1]
+            sz -= 2
+        msg = self.sock.read(sz)
+        self.cb(topic, msg)
+        if op & 6 == 2:
+            pkt = bytearray(b"\x40\x02\0\0")
+            struct.pack_into("!H", pkt, 2, pid)
+            self.sock.write(pkt)
+        elif op & 6 == 4:
+            assert 0
+        return op
+
+    # Checks whether a pending message from server is available.
+    # If not, returns immediately with None. Otherwise, does
+    # the same processing as wait_msg.
+    def check_msg(self):
+        self.sock.setblocking(False)
+        return self.wait_msg()
+
+===== FILE: firmware/umqtt/robust.py =====
+import time
+from . import simple
+
+
+class MQTTClient(simple.MQTTClient):
+    DELAY = 2
+    DEBUG = False
+
+    def delay(self, i):
+        time.sleep(self.DELAY)
+
+    def log(self, in_reconnect, e):
+        if self.DEBUG:
+            if in_reconnect:
+                print("mqtt reconnect: %r" % e)
+            else:
+                print("mqtt: %r" % e)
+
+    def reconnect(self):
+        i = 0
+        while 1:
+            try:
+                # self.connect will call a subclass definition (if any)
+                # else fall back to parent class definition
+                return self.connect(False)
+            except OSError as e:
+                self.log(True, e)
+                i += 1
+                self.delay(i)
+
+    def publish(self, topic, msg, retain=False, qos=0):
+        while 1:
+            try:
+                return super().publish(topic, msg, retain, qos)
+            except OSError as e:
+                self.log(False, e)
+            self.reconnect()
+
+    def wait_msg(self):
+        while 1:
+            try:
+                return super().wait_msg()
+            except OSError as e:
+                self.log(False, e)
+            self.reconnect()
+
+    def check_msg(self, attempts=2):
+        while attempts:
+            self.sock.setblocking(False)
+            try:
+                return super().wait_msg()
+            except OSError as e:
+                self.log(False, e)
+            self.reconnect()
+            attempts -= 1
+

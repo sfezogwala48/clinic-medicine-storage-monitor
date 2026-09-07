@@ -26,6 +26,7 @@ import {
   formatTimeOnly,
   getAccessLog,
   getDashboardSummary,
+  getSensors,
   getTemperatureTrend,
   useApiQuery,
 } from "@/lib/api";
@@ -161,11 +162,17 @@ function TempTrendChart({ data }: { data: TrendDatum[] }) {
   );
 }
 
-const TREND_SENSORS = ["SEN001", "SEN002", "SEN003"];
-
 function DashboardPage() {
-  const [trendSensor, setTrendSensor] = React.useState("SEN001");
+  const [trendSensor, setTrendSensor] = React.useState("");
   const [trendRange, setTrendRange] = React.useState<"24h" | "7d">("24h");
+
+  const sensorsQuery = useApiQuery(getSensors, [], { pollMs: 30_000 });
+  const trendSensorIds = sensorsQuery.data
+    .filter((s) => s.type === "Temp/Humidity")
+    .map((s) => s.id);
+  const effectiveSensor = trendSensorIds.includes(trendSensor)
+    ? trendSensor
+    : (trendSensorIds[0] ?? "");
 
   const summary = useApiQuery(
     getDashboardSummary,
@@ -181,9 +188,12 @@ function DashboardPage() {
     { pollMs: 15_000 },
   );
   const trend = useApiQuery(
-    () => getTemperatureTrend(trendSensor, trendRange),
+    () =>
+      effectiveSensor
+        ? getTemperatureTrend(effectiveSensor, trendRange)
+        : Promise.resolve({ unit: "°C", intervalMinutes: 0, limit: 0, points: [] }),
     { unit: "°C", intervalMinutes: 0, limit: 0, points: [] },
-    { deps: [trendSensor, trendRange], pollMs: 30_000 },
+    { deps: [effectiveSensor, trendRange], pollMs: 30_000 },
   );
   const access = useApiQuery(() => getAccessLog(3), [], { pollMs: 15_000 });
 
@@ -249,17 +259,21 @@ function DashboardPage() {
               <div>
                 <CardTitle className="text-base">Temperature Trend</CardTitle>
                 <CardDescription>
-                  {trendSensor} — last {trendRange} ({trend.data.unit}, every{" "}
+                  {effectiveSensor || "—"} — last {trendRange} ({trend.data.unit}, every{" "}
                   {trend.data.intervalMinutes || "--"} min)
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <Select value={trendSensor} onValueChange={setTrendSensor}>
+                <Select
+                  value={effectiveSensor}
+                  onValueChange={setTrendSensor}
+                  disabled={trendSensorIds.length === 0}
+                >
                   <SelectTrigger aria-label="Trend sensor" className="w-[130px]">
-                    <SelectValue />
+                    <SelectValue placeholder="No sensors" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TREND_SENSORS.map((id) => (
+                    {trendSensorIds.map((id) => (
                       <SelectItem key={id} value={id}>
                         {id}
                       </SelectItem>
@@ -289,7 +303,14 @@ function DashboardPage() {
               <p className="py-16 text-center text-sm text-muted-foreground">Loading trend…</p>
             ) : chartData.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
-                No trend data yet — publish telemetry for {trendSensor} to populate this chart.
+                {effectiveSensor ? (
+                  <>
+                    No trend data yet — publish telemetry for {effectiveSensor} to populate this
+                    chart.
+                  </>
+                ) : (
+                  "No climate sensors registered yet — onboard one from Real-Time Sensor Monitoring."
+                )}
               </p>
             ) : (
               <TempTrendChart data={chartData} />

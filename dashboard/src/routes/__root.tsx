@@ -187,7 +187,7 @@ function LoginScreen({
             <HeartPulse className="h-6 w-6" />
           </span>
           <CardTitle className="text-xl tracking-tight">MediStore Monitor</CardTitle>
-          <CardDescription>Dr Ajibola&apos;s Clinic &mdash; sign in to continue</CardDescription>
+          <CardDescription>Sign in to continue</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 pt-4">
           {selected === null ? (
@@ -268,10 +268,6 @@ function LoginScreen({
               </button>
             </form>
           )}
-          <p className="pt-2 text-center text-[11px] text-muted-foreground">
-            Seeded demo accounts: admin@clinic.co.za, +27721111111 (supervisor), +27730000000
-            (staff). Ask your admin for credentials.
-          </p>
         </CardContent>
       </Card>
     </div>
@@ -524,7 +520,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
                 <span
                   className={cn(
                     "relative inline-flex h-2 w-2 rounded-full",
-                    backendUp === false ? "bg-amber-500" : "bg-emerald-500",
+                    backendUp === false ? "bg-red-500" : "bg-emerald-500",
                   )}
                 />
               </span>

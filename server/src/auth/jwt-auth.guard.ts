@@ -31,6 +31,11 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
+    // Device/simulator traffic arrives over MQTT, not HTTP: there is no
+    // request to authenticate, so non-HTTP contexts always pass.
+    if (context.getType() !== "http") {
+      return true;
+    }
     const handler = context.getHandler();
     const target = context.getClass();
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [handler, target])) {

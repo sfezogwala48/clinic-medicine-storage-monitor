@@ -45,13 +45,13 @@ release. Add a tool name to select part of the graph. For example, run
 Vite+ monorepo with three workspaces (see `pnpm-workspace.yaml`):
 
 - `server/` — NestJS API (MQTT telemetry ingest, SQLite, health checks, Scalar docs). Dev: `vp run server#dev` (PORT env, default 3000). Health: `GET /health`.
-- `dashboard/` — TanStack Router SPA (React + shadcn/ui on Base UI). Dev: `vp run dashboard#dev` (port 3000); point at the API via `VITE_API_BASE_URL`.
+- `dashboard/` — TanStack Router SPA (React + shadcn/ui on Base UI). Dev: `vp run dashboard#dev` (port 5173); point at the API via `VITE_API_BASE_URL`.
 - `mqtt-tester/` — MQTT test client. Dev: `vp run mqtt-tester#dev`.
 
 ## Common Commands (run from the workspace root)
 
 - `vp install` — install all workspace dependencies.
-- `vp run --parallel server#dev dashboard#dev` (or `vp run dev`) — run API + UI together. Give the server a different port when both default to 3000, e.g. `PORT=3001`.
+- `vp run dev` (native parallel: `server#dev` on `:3000` + `dashboard#dev` on `:5173`) — run API + UI together. The dashboard points at the API via `VITE_API_BASE_URL` (defaults to `http://localhost:3000`).
 - `vp run -r build` — build all workspaces.
 - `vp run -r test` — test all workspaces.
 - `vp check` — format, lint, and type-check the whole repo (runs on pre-commit via `.vite-hooks`).
