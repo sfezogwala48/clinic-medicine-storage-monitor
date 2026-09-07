@@ -1,13 +1,18 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { IsISO8601, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class PublishReadingDto {
   @ApiProperty({
     example: "fridge-01",
     description: "Storage device id (also encoded in the MQTT topic)",
   })
+  @IsString()
   deviceId!: string;
 
   @ApiProperty({ example: 4.5, minimum: -30, maximum: 80, description: "Temperature in Celsius" })
+  @IsNumber()
+  @Min(-30)
+  @Max(80)
   temperatureC!: number;
 
   @ApiProperty({
@@ -16,6 +21,9 @@ export class PublishReadingDto {
     maximum: 100,
     description: "Relative humidity in percent",
   })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
   humidityPct!: number;
 
   @ApiProperty({
@@ -23,6 +31,8 @@ export class PublishReadingDto {
     required: false,
     description: "ISO timestamp; defaults to server time when omitted",
   })
+  @IsOptional()
+  @IsISO8601()
   recordedAt?: string;
 }
 
