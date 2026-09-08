@@ -9,7 +9,6 @@ export class ThresholdsDto {
 }
 
 export class NotificationSettingsDto {
-  @ApiProperty({ example: true }) @IsBoolean() smsEnabled!: boolean;
   @ApiProperty({ example: true }) @IsBoolean() buzzerEnabled!: boolean;
   @ApiProperty({ example: false }) @IsBoolean() emailEnabled!: boolean;
   @ApiProperty({ example: ["+27731234567"] })

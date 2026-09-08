@@ -6,9 +6,6 @@ export class NotificationSettingsEntity {
   id!: number;
 
   @Column()
-  smsEnabled!: boolean;
-
-  @Column()
   buzzerEnabled!: boolean;
 
   @Column()

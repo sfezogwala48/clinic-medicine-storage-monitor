@@ -4,7 +4,7 @@ import { IsOptional, IsString } from "class-validator";
 export class NotificationDto {
   @ApiProperty({ example: "NOT007" }) id!: string;
   @ApiProperty({ example: "ALT006" }) alertId!: string;
-  @ApiProperty({ enum: ["SMS", "Buzzer"] }) type!: string;
+  @ApiProperty({ enum: ["Buzzer", "Email", "Email (failed)"] }) type!: string;
   @ApiProperty({ example: "+27731234567" }) recipient!: string;
   @ApiProperty({ example: "ALERT: Vaccine Container unauthorized access detected" })
   message!: string;

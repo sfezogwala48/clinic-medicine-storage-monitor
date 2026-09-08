@@ -18,7 +18,6 @@ function thresholdsToDto(t: ThresholdsEntity): ThresholdsDto {
 
 function notifToDto(n: NotificationSettingsEntity): NotificationSettingsDto {
   return {
-    smsEnabled: n.smsEnabled,
     buzzerEnabled: n.buzzerEnabled,
     emailEnabled: n.emailEnabled,
     recipients: n.recipients,

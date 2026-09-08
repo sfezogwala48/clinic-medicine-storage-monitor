@@ -46,7 +46,7 @@ export interface AccessEvent {
 export interface Notification {
   id: string;
   alertId: string;
-  type: "SMS" | "Buzzer";
+  type: "Email" | "Email (failed)" | "Buzzer";
   recipient: string;
   message: string;
 }

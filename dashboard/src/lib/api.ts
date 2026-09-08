@@ -142,7 +142,6 @@ export interface TrendResponse {
 }
 
 export interface NotificationSettings {
-  smsEnabled: boolean;
   buzzerEnabled: boolean;
   emailEnabled: boolean;
   recipients: string[];
@@ -399,7 +398,7 @@ function normalizeNotification(raw: Record<string, unknown>): Notification {
   return {
     id: str(raw.id, cryptoRandom()),
     alertId: str(raw.alertId ?? raw.alert_id ?? raw.alert, ""),
-    type: (raw.type as Notification["type"]) ?? "SMS",
+    type: (raw.type as Notification["type"]) ?? "Email",
     recipient: str(raw.recipient ?? raw.to, "-"),
     message: str(raw.message ?? raw.msg ?? raw.text, "-"),
   };
@@ -449,7 +448,6 @@ export async function updateThresholds(t: Thresholds): Promise<Thresholds> {
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   const raw = await apiFetch<Record<string, unknown>>("/api/notification-settings");
   return {
-    smsEnabled: Boolean(raw.smsEnabled ?? raw.sms_enabled ?? true),
     buzzerEnabled: Boolean(raw.buzzerEnabled ?? raw.buzzer_enabled ?? true),
     emailEnabled: Boolean(raw.emailEnabled ?? raw.email_enabled ?? false),
     recipients: (raw.recipients as string[]) ?? [],
@@ -465,7 +463,6 @@ export async function updateNotificationSettings(
   });
   if (!raw || Object.keys(raw).length === 0) return s;
   return {
-    smsEnabled: Boolean(raw.smsEnabled ?? s.smsEnabled),
     buzzerEnabled: Boolean(raw.buzzerEnabled ?? s.buzzerEnabled),
     emailEnabled: Boolean(raw.emailEnabled ?? s.emailEnabled),
     recipients: (raw.recipients as string[]) ?? s.recipients,
@@ -574,6 +571,24 @@ export async function getAuditTrail(limit = 100): Promise<AuditEntry[]> {
   );
   const list = Array.isArray(raw) ? raw : ((raw.entries ?? raw.data ?? raw.logs ?? []) as unknown);
   return (list as Record<string, unknown>[]).map(normalizeAudit);
+}
+
+export interface EmailStatus {
+  configured: boolean;
+  serviceId: string;
+  templateId: string;
+  publicKey: string;
+}
+
+export async function getEmailStatus(): Promise<EmailStatus> {
+  return apiFetch<EmailStatus>("/api/email/status");
+}
+
+export async function sendTestEmail(to: string): Promise<{ sent: boolean; configured: boolean }> {
+  return apiFetch<{ sent: boolean; configured: boolean }>("/api/email/test", {
+    method: "POST",
+    body: JSON.stringify({ to }),
+  });
 }
 
 export async function checkBackend(): Promise<boolean> {

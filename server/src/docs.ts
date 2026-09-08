@@ -20,7 +20,7 @@ export function setupApiReference(app: INestApplication) {
     .addTag("readings", "Latest readings and temperature trend")
     .addTag("alerts", "Threshold violations")
     .addTag("access", "Container access events")
-    .addTag("notifications", "SMS and buzzer dispatch log")
+    .addTag("notifications", "Email and buzzer dispatch log")
     .addTag("dashboard", "Dashboard aggregates")
     .addTag("settings", "Thresholds and notification settings")
     .addTag("users", "System users and audit trail")

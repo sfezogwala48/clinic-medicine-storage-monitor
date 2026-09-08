@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AppLogger } from "../core/logger/app-logger.service.js";
 import { MqttPublishService } from "../mqtt/mqtt-publish.service.js";
+import { EmailService } from "./email.service.js";
 import { buzzerCommandTopic } from "../mqtt/mqtt.options.js";
 import { SensorsService } from "../sensors/sensors.service.js";
 import { SettingsService } from "../settings/settings.service.js";
@@ -16,6 +17,7 @@ export class NotificationsService {
     private readonly settings: SettingsService,
     private readonly sensors: SensorsService,
     private readonly mqtt: MqttPublishService,
+    private readonly email: EmailService,
     private readonly logger: AppLogger,
   ) {}
 
@@ -33,7 +35,7 @@ export class NotificationsService {
       .padStart(2, "0")}`;
   }
 
-  /** Fan-out for a new alert: SMS rows per recipient + buzzer command per actuator at the sensor's location. */
+  /** Fan-out for a new alert: email per recipient + buzzer command per actuator at the sensor's location. */
   async dispatchForAlert(alert: {
     id: string;
     sensorId: string;
@@ -44,12 +46,22 @@ export class NotificationsService {
     const sentAt = new Date().toISOString();
     const message = `ALERT: ${alert.type} on ${alert.sensorId} (${alert.severity})`;
 
-    if (settings.smsEnabled) {
-      for (const recipient of settings.recipients) {
+    if (settings.emailEnabled) {
+      const emailRecipients = settings.recipients.filter((r) => r.includes("@"));
+      for (const recipient of emailRecipients) {
+        const sent = await this.email.sendAlertEmail({
+          toEmail: recipient,
+          alertId: alert.id,
+          sensorId: alert.sensorId,
+          type: alert.type,
+          severity: alert.severity,
+          message,
+        });
+        // Log the attempt regardless so the notification log shows email activity.
         await this.notifications.save({
           id: this.nextId("NOT"),
           alertId: alert.id,
-          type: "SMS",
+          type: sent ? "Email" : "Email (failed)",
           recipient,
           message,
           sentAt,

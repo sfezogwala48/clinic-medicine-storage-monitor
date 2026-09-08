@@ -9,11 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   ApiError,
+  getEmailStatus,
   getNotificationSettings,
   getThresholds,
+  sendTestEmail,
   updateNotificationSettings,
   updateThresholds,
   useApiQuery,
+  type EmailStatus,
   type NotificationSettings,
 } from "@/lib/api";
 import { EMPTY_THRESHOLDS, type Thresholds } from "@/lib/types";
@@ -24,7 +27,6 @@ export const Route = createFileRoute("/settings")({
 });
 
 const EMPTY_NOTIF: NotificationSettings = {
-  smsEnabled: false,
   buzzerEnabled: false,
   emailEnabled: false,
   recipients: [],
@@ -142,6 +144,86 @@ function SaveButton({
   );
 }
 
+function EmailJsPanel() {
+  const status = useApiQuery<EmailStatus | null>(async () => getEmailStatus(), null);
+  const [to, setTo] = React.useState("");
+  const [state, setState] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [msg, setMsg] = React.useState<string | null>(null);
+
+  const configured = status.data?.configured ?? false;
+
+  const send = async () => {
+    if (!to.includes("@")) {
+      setMsg("Enter a valid email address.");
+      return;
+    }
+    setState("sending");
+    setMsg(null);
+    try {
+      const res = await sendTestEmail(to.trim());
+      if (res.sent) {
+        setState("sent");
+        setMsg(`Test email sent to ${to.trim()}.`);
+      } else if (!res.configured) {
+        setState("error");
+        setMsg("EmailJS is not fully configured on the server (service/template ID missing).");
+      } else {
+        setState("error");
+        setMsg("EmailJS rejected the send — check the service/template IDs and template params.");
+      }
+    } catch (e) {
+      setState("error");
+      setMsg(e instanceof Error ? e.message : "Send failed");
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">EmailJS</p>
+        {status.loading ? (
+          <span className="text-xs text-muted-foreground">Checking…</span>
+        ) : (
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-xs font-medium",
+              configured
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+            )}
+          >
+            {configured ? "Connected" : "Not configured"}
+          </span>
+        )}
+      </div>
+      {!status.loading && !configured && (
+        <p className="text-xs text-muted-foreground">
+          Set EMAILJS_SERVICE_ID + EMAILJS_TEMPLATE_ID in server/.env (public/private keys are
+          already set). Your template must accept: to_email, subject, alert_id, sensor_id,
+          alert_type, severity, message.
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Input
+          type="email"
+          placeholder="you@clinic.org"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          aria-label="Test email recipient"
+        />
+        <Button size="sm" onClick={send} disabled={state === "sending"}>
+          {state === "sending" ? "Sending…" : "Send test"}
+        </Button>
+      </div>
+      {msg && (
+        <p className={cn("text-xs", state === "error" ? "text-red-600" : "text-muted-foreground")}>
+          {msg}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SettingsPage() {
   const thresholdsQuery = useApiQuery(getThresholds, EMPTY_THRESHOLDS);
   const notifQuery = useApiQuery(getNotificationSettings, EMPTY_NOTIF);
@@ -180,7 +262,7 @@ function SettingsPage() {
     setThresholds((prev) => ({ ...prev, [key]: value }));
   };
 
-  const setChannel = (key: "smsEnabled" | "buzzerEnabled" | "emailEnabled") => (value: boolean) => {
+  const setChannel = (key: "buzzerEnabled" | "emailEnabled") => (value: boolean) => {
     setSavingNotif("idle");
     setNotifDirty(true);
     setNotif((prev) => ({ ...prev, [key]: value }));
@@ -309,14 +391,6 @@ function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <ChannelRow
-              id="notif-sms"
-              title="SMS alerts"
-              description="Text new alerts to the recipients below."
-              checked={notif.smsEnabled}
-              disabled={loading || offline}
-              onChange={setChannel("smsEnabled")}
-            />
-            <ChannelRow
               id="notif-buzzer"
               title="On-site buzzer"
               description="Sound the buzzer at the sensor's location. Needs an active buzzer installed there."
@@ -326,12 +400,13 @@ function SettingsPage() {
             />
             <ChannelRow
               id="notif-email"
-              title="Email digest"
-              description="A daily summary email to the recipients below."
+              title="Email alerts"
+              description="Send an EmailJS email to every recipient address below on each new alert."
               checked={notif.emailEnabled}
               disabled={loading || offline}
               onChange={setChannel("emailEnabled")}
             />
+            <EmailJsPanel />
 
             <div className="space-y-1.5 pt-1">
               <Label htmlFor="recipients">Recipients</Label>
@@ -345,10 +420,13 @@ function SettingsPage() {
                   setRecipientsText(e.target.value);
                 }}
                 rows={3}
-                placeholder="+27730000000"
+                placeholder="nurse@clinic.org"
                 className="w-full rounded-md border border-input bg-background p-3 text-sm placeholder:text-muted-foreground"
               />
-              <p className="text-xs text-muted-foreground">One phone number or email per line.</p>
+              <p className="text-xs text-muted-foreground">
+                One email address per line. Each address receives an EmailJS email when email alerts
+                are on.
+              </p>
             </div>
             <SaveButton
               state={savingNotif}

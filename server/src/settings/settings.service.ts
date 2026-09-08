@@ -26,7 +26,6 @@ export class SettingsService {
     if ((await this.notif.count()) === 0) {
       await this.notif.save({
         id: 1,
-        smsEnabled: true,
         buzzerEnabled: true,
         emailEnabled: false,
         recipients: [],
@@ -61,7 +60,6 @@ export class SettingsService {
   }
 
   async saveNotificationSettings(patch: {
-    smsEnabled: boolean;
     buzzerEnabled: boolean;
     emailEnabled: boolean;
     recipients: string[];
@@ -69,7 +67,6 @@ export class SettingsService {
     const current = await this.getNotificationSettings();
     return this.notif.save({
       id: current.id,
-      smsEnabled: patch.smsEnabled,
       buzzerEnabled: patch.buzzerEnabled,
       emailEnabled: patch.emailEnabled,
       recipients: patch.recipients,

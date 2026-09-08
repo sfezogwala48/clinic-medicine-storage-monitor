@@ -230,7 +230,7 @@ function AlertsPage() {
           )}
         </h2>
         <p className="mb-2 text-sm text-muted-foreground">
-          SMS + buzzer dispatch log — click an alert row to filter by <code>?alertId=…</code>.
+          Email + buzzer dispatch log — click an alert row to filter by <code>?alertId=…</code>.
         </p>
         <Card>
           <CardContent className="p-0">
