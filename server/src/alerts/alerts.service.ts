@@ -114,16 +114,16 @@ export class AlertsService {
 
   async evaluateDoorOpen(
     sensorId: string,
-    openMinutes: number,
+    openSeconds: number,
     container: string,
   ): Promise<AlertEntity[]> {
     const t = await this.settings.getThresholds();
-    if (openMinutes >= t.doorOpenLimitMin) {
+    if (openSeconds >= t.doorOpenLimitSec) {
       return [
         await this.raise({
           sensorId,
           type: "Door Left Open",
-          value: `${container} open ${Math.round(openMinutes)}m`,
+          value: `${container} open ${Math.round(openSeconds)}s`,
           severity: "High",
         }),
       ];

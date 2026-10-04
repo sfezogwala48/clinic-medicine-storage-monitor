@@ -55,7 +55,7 @@ export interface Thresholds {
   fridgeMin: number;
   fridgeMax: number;
   roomMax: number;
-  doorOpenLimitMin: number;
+  doorOpenLimitSec: number;
 }
 
 /** Neutral form state before the server responds — not sample data. */
@@ -63,7 +63,7 @@ export const EMPTY_THRESHOLDS: Thresholds = {
   fridgeMin: 0,
   fridgeMax: 0,
   roomMax: 0,
-  doorOpenLimitMin: 0,
+  doorOpenLimitSec: 0,
 };
 
 export interface AppUser {

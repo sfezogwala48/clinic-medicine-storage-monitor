@@ -39,7 +39,7 @@ function validateThresholds(t: Thresholds): string | null {
     ["Fridge minimum", t.fridgeMin],
     ["Fridge maximum", t.fridgeMax],
     ["Room maximum", t.roomMax],
-    ["Door-open limit", t.doorOpenLimitMin],
+    ["Door-open limit", t.doorOpenLimitSec],
   ];
   for (const [label, v] of nums) {
     if (!Number.isFinite(v)) return `${label} must be a number.`;
@@ -47,8 +47,8 @@ function validateThresholds(t: Thresholds): string | null {
   if (t.fridgeMin >= t.fridgeMax) return "Fridge minimum must be below the maximum.";
   if (t.fridgeMin < -30 || t.fridgeMax > 80) return "Fridge range must stay within -30…80 °C.";
   if (t.roomMax < -30 || t.roomMax > 80) return "Room maximum must stay within -30…80 °C.";
-  if (t.doorOpenLimitMin < 0 || t.doorOpenLimitMin > 120) {
-    return "Door-open limit must be between 0 and 120 minutes.";
+  if (t.doorOpenLimitSec < 0 || t.doorOpenLimitSec > 3600) {
+    return "Door-open limit must be between 0 and 3600 seconds.";
   }
   return null;
 }
@@ -357,11 +357,11 @@ function SettingsPage() {
             <ThresholdField
               id="door-limit"
               label="Door-open limit"
-              unit="minutes"
+              unit="seconds"
               hint="Alert when a door stays open longer than this. Use 0 to alert on any opening."
-              value={thresholds.doorOpenLimitMin}
+              value={thresholds.doorOpenLimitSec}
               disabled={loading || offline}
-              onChange={set("doorOpenLimitMin")}
+              onChange={set("doorOpenLimitSec")}
             />
             {thresholdError && thresholdsDirty && (
               <p className={cn("text-sm text-red-600")}>{thresholdError}</p>

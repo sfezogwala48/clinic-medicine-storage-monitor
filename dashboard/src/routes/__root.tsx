@@ -31,6 +31,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { Role } from "@/lib/types";
 import {
   API_BASE,
+  APP_TIME_ZONE,
   UNAUTHORIZED_EVENT,
   changePassword as apiChangePassword,
   checkBackend,
@@ -434,6 +435,30 @@ function ProfileBlock({ role }: { role: Role }) {
   );
 }
 
+/** Live South African time (SAST, UTC+2) so the clinic never has to guess which zone the readings are in. */
+function SastClock() {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const date = now.toLocaleDateString("en-ZA", {
+    timeZone: APP_TIME_ZONE,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const time = now.toLocaleTimeString("en-ZA", { timeZone: APP_TIME_ZONE, hour12: false });
+  return (
+    <span
+      title={`South African Standard Time (${APP_TIME_ZONE}, UTC+2)`}
+      className="hidden text-sm tabular-nums text-muted-foreground lg:inline"
+    >
+      {date} · {time} SAST
+    </span>
+  );
+}
+
 function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
   const pathname = useLocation({ select: (s) => s.pathname });
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
@@ -454,15 +479,6 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
       window.clearInterval(id);
     };
   }, []);
-  const today = React.useMemo(
-    () =>
-      new Date().toLocaleDateString("en-ZA", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-    [],
-  );
 
   return (
     <div id="root-content" className="flex min-h-svh">
@@ -526,7 +542,7 @@ function AppShell({ role, onLogout }: { role: Role; onLogout: () => void }) {
               </span>
               {backendUp === null ? "Checking…" : backendUp ? "Live" : "Offline"}
             </span>
-            <span className="hidden text-sm text-muted-foreground lg:inline">{today}</span>
+            <SastClock />
             <ThemeToggle />
             <Button variant="ghost" size="icon" aria-label="Log out" onClick={onLogout}>
               <LogOut className="h-4 w-4" />

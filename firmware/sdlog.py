@@ -16,7 +16,7 @@ import config
 _tried = False
 _ready = False
 
-_HISTORY_HEADER = "recordedAt,source,temperatureC,humidityPct,doorOpen\n"
+_HISTORY_HEADER = "recordedAtLocal,source,temperatureC,humidityPct,doorOpen\n"
 
 
 def mount():
@@ -77,7 +77,7 @@ def log_history(recorded_at, source, temp_c=None, humidity=None, door_open=None)
     door = None if door_open is None else int(door_open)
     _append(
         config.SD_LOG_FILE,
-        "%s,%s,%s,%s,%s\n" % (recorded_at, source, _cell(temp_c), _cell(humidity), _cell(door)),
+        "%s,%s,%s,%s,%s\n" % (_cell(recorded_at), source, _cell(temp_c), _cell(humidity), _cell(door)),
     )
 
 

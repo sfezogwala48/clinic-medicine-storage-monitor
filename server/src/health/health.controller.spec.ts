@@ -33,6 +33,18 @@ describe("HealthController", () => {
     expect(check).not.toHaveBeenCalled();
   });
 
+  it("time should return the current UTC time in whole seconds with a Z suffix", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-04T18:00:15.789Z"));
+    try {
+      const { controller } = createController();
+
+      expect(controller.time()).toEqual({ utc: "2026-10-04T18:00:15Z" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("readiness should delegate to the terminus health check", async () => {
     const { controller, check } = createController();
 

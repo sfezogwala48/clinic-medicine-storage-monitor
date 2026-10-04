@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { MoreThan, Repository } from "typeorm";
 import { AlertsService } from "../alerts/alerts.service.js";
 import { SensorsService } from "../sensors/sensors.service.js";
 import { SettingsService } from "../settings/settings.service.js";
@@ -73,11 +73,51 @@ export class AccessService {
         prev &&
         prev.id !== event.id &&
         prev.durationSec != null &&
-        prev.durationSec >= t.doorOpenLimitMin * 60
+        prev.durationSec >= t.doorOpenLimitSec
       ) {
-        await this.alerts.evaluateDoorOpen(sensorId, prev.durationSec / 60, container);
+        await this.alerts.evaluateDoorOpen(sensorId, prev.durationSec, container);
       }
     }
     return event;
+  }
+
+  /**
+   * Raise "Door Left Open" for every door that is open right now and has been
+   * for at least the dashboard's door-open limit. Run on a timer: the check in
+   * recordDoor only sees a long opening once the door has closed, which is too
+   * late for the buzzer.
+   *
+   * The door sensor reports its state every cycle, so "open since" is the first
+   * open event after the most recent close (or the first event ever).
+   */
+  async checkOpenDoors(now: number = Date.now()): Promise<void> {
+    const limitSec = (await this.settings.getThresholds()).doorOpenLimitSec;
+    const rows = await this.events
+      .createQueryBuilder("e")
+      .select("e.sensorId", "sensorId")
+      .distinct(true)
+      .getRawMany<{ sensorId: string }>();
+    for (const { sensorId } of rows) {
+      const latest = await this.events.findOne({
+        where: { sensorId },
+        order: { occurredAt: "DESC" },
+      });
+      if (!latest?.open) continue;
+      const lastClose = await this.events.findOne({
+        where: { sensorId, open: false },
+        order: { occurredAt: "DESC" },
+      });
+      const openedAt = await this.events.findOne({
+        where: lastClose
+          ? { sensorId, open: true, occurredAt: MoreThan(lastClose.occurredAt) }
+          : { sensorId, open: true },
+        order: { occurredAt: "ASC" },
+      });
+      if (!openedAt) continue;
+      const openSeconds = (now - new Date(openedAt.occurredAt).getTime()) / 1000;
+      if (openSeconds >= limitSec) {
+        await this.alerts.evaluateDoorOpen(sensorId, openSeconds, latest.container);
+      }
+    }
   }
 }

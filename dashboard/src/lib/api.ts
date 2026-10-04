@@ -164,12 +164,16 @@ function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
 }
 
-/** Format an ISO-8601 timestamp for display (USAGE.md §2). */
+/** Timestamps are stored and sent as UTC; the clinic reads them in South African time (SAST, UTC+2, no DST). */
+export const APP_TIME_ZONE = "Africa/Johannesburg";
+
+/** Format an ISO-8601 timestamp for display in South African time (USAGE.md §2). */
 export function formatTime(iso: string | null | undefined): string {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString("en-ZA", {
+    timeZone: APP_TIME_ZONE,
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -183,7 +187,7 @@ export function formatTimeOnly(iso: string | null | undefined): string {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleTimeString("en-ZA", { hour12: false });
+  return d.toLocaleTimeString("en-ZA", { timeZone: APP_TIME_ZONE, hour12: false });
 }
 
 /* ------------------------------------------------------------------ */
@@ -423,11 +427,9 @@ export async function getThresholds(): Promise<Thresholds> {
       num(raw.fridgeMax ?? raw.fridge_max, EMPTY_THRESHOLDS.fridgeMax) ??
       EMPTY_THRESHOLDS.fridgeMax,
     roomMax: num(raw.roomMax ?? raw.room_max, EMPTY_THRESHOLDS.roomMax) ?? EMPTY_THRESHOLDS.roomMax,
-    doorOpenLimitMin:
-      num(
-        raw.doorOpenLimitMin ?? raw.door_open_limit_min ?? raw.doorOpenLimit,
-        EMPTY_THRESHOLDS.doorOpenLimitMin,
-      ) ?? EMPTY_THRESHOLDS.doorOpenLimitMin,
+    doorOpenLimitSec:
+      num(raw.doorOpenLimitSec ?? raw.door_open_limit_sec, EMPTY_THRESHOLDS.doorOpenLimitSec) ??
+      EMPTY_THRESHOLDS.doorOpenLimitSec,
   };
 }
 
@@ -441,7 +443,7 @@ export async function updateThresholds(t: Thresholds): Promise<Thresholds> {
     fridgeMin: num(raw.fridgeMin, t.fridgeMin) ?? t.fridgeMin,
     fridgeMax: num(raw.fridgeMax, t.fridgeMax) ?? t.fridgeMax,
     roomMax: num(raw.roomMax, t.roomMax) ?? t.roomMax,
-    doorOpenLimitMin: num(raw.doorOpenLimitMin, t.doorOpenLimitMin) ?? t.doorOpenLimitMin,
+    doorOpenLimitSec: num(raw.doorOpenLimitSec, t.doorOpenLimitSec) ?? t.doorOpenLimitSec,
   };
 }
 

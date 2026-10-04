@@ -91,15 +91,22 @@ uvx mpremote
 - **Door**: events publish immediately on open/close (80 ms debounce) plus a
   heartbeat every `DOOR_HEARTBEAT_S` (5 min) so a silent door is never stale.
 - **Buzzer**: parses `{actuatorId, on, alertId?, pattern?}` from the server's
-  `NotificationsService` and drives the pin. Publishes an ack to
-  `clinic/actuators/<id>/status` per command. The buzzer is force-silenced if
-  the connection drops.
+  `NotificationsService` and drives `BUZZER_PIN`. Alerts use `pattern: "beep"`
+  (pulses of `BUZZER_BEEP_ON_MS` / `BUZZER_BEEP_OFF_MS`); only an explicit
+  `"continuous"` gives a solid tone, and `on: false` silences it. Publishes an
+  ack to `clinic/actuators/<id>/status` per command. The standalone `buzzer`
+  role is force-silenced if the connection drops. With `STORAGE_HAS_BUZZER`
+  the `storage` role drives the buzzer itself: it subscribes to
+  `clinic/actuators/<ACTUATOR_ID>/commands/buzzer`, announces itself on the
+  actuator status topic so the server registers it as a buzzer at its
+  location, and keeps sampling while it beeps.
 - **Resilience**: the buzzer uses `umqtt.robust` for MQTT-level reconnects; if
   WiFi itself drops, `main()` re-associates and rebuilds the session. No reset
   needed.
 - **SD card** (`SD_ENABLED`, SPI0 pins in `config.py`; optional, the firmware
   runs without a card): sensor roles append every reading to
-  `SD_LOG_FILE` (CSV: `recordedAt,source,temperatureC,humidityPct,doorOpen`).
+  `SD_LOG_FILE` (CSV: `recordedAtLocal,source,temperatureC,humidityPct,doorOpen`, with
+  local time such as `2026-01-31T14:00:05+02:00`).
   While the link is down they keep sampling and queue the unsent messages in
   `SD_BACKLOG_FILE`; after reconnecting they replay the backlog oldest-first
   (`SD_REPLAY_BATCH` rows per cycle) with their original `recordedAt`, then

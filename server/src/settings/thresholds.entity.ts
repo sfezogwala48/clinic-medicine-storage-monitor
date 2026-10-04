@@ -14,8 +14,9 @@ export class ThresholdsEntity {
   @Column({ type: "float" })
   roomMax!: number;
 
-  @Column({ type: "float" })
-  doorOpenLimitMin!: number;
+  /** How long a door may stay open before "Door Left Open" fires, in seconds. */
+  @Column({ type: "float", default: 10 })
+  doorOpenLimitSec!: number;
 
   @Column({ type: "datetime" })
   updatedAt!: string;

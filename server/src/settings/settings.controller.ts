@@ -12,7 +12,7 @@ function thresholdsToDto(t: ThresholdsEntity): ThresholdsDto {
     fridgeMin: t.fridgeMin,
     fridgeMax: t.fridgeMax,
     roomMax: t.roomMax,
-    doorOpenLimitMin: t.doorOpenLimitMin,
+    doorOpenLimitSec: t.doorOpenLimitSec,
   };
 }
 

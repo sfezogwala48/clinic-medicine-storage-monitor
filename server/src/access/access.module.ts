@@ -6,6 +6,7 @@ import { SettingsModule } from "../settings/settings.module.js";
 import { AccessEventEntity } from "./access-event.entity.js";
 import { AccessController } from "./access.controller.js";
 import { AccessService } from "./access.service.js";
+import { DoorWatchService } from "./door-watch.service.js";
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { AccessService } from "./access.service.js";
     AlertsModule,
   ],
   controllers: [AccessController],
-  providers: [AccessService],
+  providers: [AccessService, DoorWatchService],
   exports: [AccessService],
 })
 export class AccessModule {}

@@ -5,7 +5,9 @@ export class ThresholdsDto {
   @ApiProperty({ example: 2 }) @IsNumber() fridgeMin!: number;
   @ApiProperty({ example: 8 }) @IsNumber() fridgeMax!: number;
   @ApiProperty({ example: 25 }) @IsNumber() roomMax!: number;
-  @ApiProperty({ example: 5 }) @IsNumber() doorOpenLimitMin!: number;
+  @ApiProperty({ example: 10, description: "Seconds a door may stay open before alerting" })
+  @IsNumber()
+  doorOpenLimitSec!: number;
 }
 
 export class NotificationSettingsDto {

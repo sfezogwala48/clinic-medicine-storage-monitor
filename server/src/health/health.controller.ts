@@ -32,6 +32,18 @@ export class HealthController {
     return { status: "ok" as const };
   }
 
+  /**
+   * Current UTC time for devices that cannot reach NTP (e.g. guest WiFi that
+   * blocks UDP 123). Whole seconds, in the same format devices send as
+   * `recordedAt`.
+   */
+  @Get("time")
+  @ApiOperation({ summary: "Server UTC time, for device clock sync" })
+  @ApiResponse({ status: 200, description: "Current UTC time, e.g. 2026-01-31T12:00:00Z" })
+  time() {
+    return { utc: `${new Date().toISOString().slice(0, 19)}Z` };
+  }
+
   /** Readiness: sqlite, MQTT broker, disk space, and memory can serve traffic. */
   @Get("ready")
   @ApiOperation({ summary: "Readiness probe (sqlite, MQTT, disk, memory)" })

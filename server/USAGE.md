@@ -94,7 +94,7 @@ c.subscribe("clinic/actuators/BUZ-A/commands/buzzer")  # if this unit also drive
 c.loop_forever()
 ```
 
-Thresholds that trigger alerts (defaults, change via `PUT /api/thresholds`): fridge 2–8 °C, room max 25 °C, humidity 30–60 %, door-open limit 5 min.
+Thresholds that trigger alerts (defaults, change via `PUT /api/thresholds`): fridge 2–8 °C, room max 25 °C, humidity 30–60 %, door-open limit 10 s.
 
 ---
 
@@ -120,7 +120,7 @@ All responses are JSON. Timestamps are **ISO-8601** — format them in the UI (`
 | `GET`          | `/api/reports/summary`                             | Compliance score, access total, waste prevented                                                                                                            |
 | `GET`          | `/api/reports`                                     | Archive `[{name, size, downloadUrl}]`                                                                                                                      |
 | `GET`          | `/api/reports/:name`                               | File download                                                                                                                                              |
-| `GET` / `PUT`  | `/api/thresholds`                                  | `{fridgeMin, fridgeMax, roomMax, doorOpenLimitMin}`                                                                                                        |
+| `GET` / `PUT`  | `/api/thresholds`                                  | `{fridgeMin, fridgeMax, roomMax, doorOpenLimitSec}`                                                                                                        |
 | `GET` / `PUT`  | `/api/notification-settings`                       | `{smsEnabled, buzzerEnabled, emailEnabled, recipients[]}`                                                                                                  |
 | `GET` / `POST` | `/api/users`                                       | Create (admin only) defaults to `staff`; optional `password`, else a `temporaryPassword` is returned once                                                  |
 | `GET`          | `/api/audit-trail?limit=100`                       | Newest first                                                                                                                                               |
@@ -139,7 +139,7 @@ curl -s "$BASE/api/temperature-trend?sensorId=SEN001&range=24h" -H "$AUTH"
 curl -s "$BASE/api/alerts?status=Active" -H "$AUTH"
 curl -s -X PATCH $BASE/api/alerts/ALT001/acknowledge -H "$AUTH"
 curl -s -X PUT $BASE/api/thresholds -H "$AUTH" -H 'Content-Type: application/json' \
-  -d '{"fridgeMin":2,"fridgeMax":8,"roomMax":25,"doorOpenLimitMin":5}'
+  -d '{"fridgeMin":2,"fridgeMax":8,"roomMax":25,"doorOpenLimitSec":10}'
 curl -s -X POST $BASE/api/users -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"Nurse Khumalo","password":"Nurse123!"}'
 ```
 

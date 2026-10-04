@@ -22,5 +22,9 @@ export class BuzzerCommandDto {
   @ApiProperty({ example: "BUZ-A" }) actuatorId!: string;
   @ApiProperty({ example: true }) on!: boolean;
   @ApiPropertyOptional({ example: "ALT006" }) alertId?: string;
-  @ApiPropertyOptional({ example: "continuous" }) pattern?: string;
+  @ApiPropertyOptional({
+    example: "beep",
+    description: '"beep" (pulsed, the default for alerts), "continuous" (solid tone) or "off"',
+  })
+  pattern?: string;
 }

@@ -78,7 +78,7 @@ export class NotificationsService {
           actuatorId: actuator.id,
           on: true,
           alertId: alert.id,
-          pattern: "continuous",
+          pattern: "beep",
         });
         await this.notifications.save({
           id: this.nextId("NOT"),

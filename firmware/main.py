@@ -30,7 +30,17 @@ import time
 import config
 import machine
 import sdlog
-from net import connect_wifi, iso_utc, sync_clock, wifi_nudge, wifi_ok
+from net import (
+    clock_due,
+    connect_wifi,
+    iso_utc,
+    local_hms,
+    local_iso,
+    local_time_str,
+    sync_clock,
+    wifi_nudge,
+    wifi_ok,
+)
 from umqtt.robust import MQTTClient
 from umqtt.simple import MQTTClient as SimpleClient
 
@@ -46,7 +56,8 @@ LED = machine.Pin("LED", machine.Pin.OUT)
 
 
 def log(*args):
-    print("[%s]" % config.DEVICE_ID, *args)
+    # Console stamps are local time (SAST); the payloads themselves stay UTC.
+    print("[%s] [%s]" % (local_hms() or "--:--:--", config.DEVICE_ID), *args)
 
 
 def blink(n=1, ms=80):
@@ -113,6 +124,65 @@ def publish_online(client):
     blink(2)
 
 
+def buzzer_mode(text):
+    """Map a server buzzer command to "off", "beep" or "continuous".
+
+    Alerts arrive as {"on": true, "pattern": "beep"}; only an explicit
+    "continuous" gives a solid tone, so anything else that turns the buzzer
+    on beeps. The server publishes through NestJS, which wraps the payload as
+    {"pattern": <topic>, "data": {...}}, so that envelope is unwrapped first.
+    Plain "on"/"true"/"1" text is accepted too.
+    """
+    try:
+        command = json.loads(text)
+    except ValueError:
+        command = text.strip().lower() in ("on", "true", "1")
+    if isinstance(command, dict) and isinstance(command.get("data"), dict):
+        command = command["data"]
+    if isinstance(command, dict):
+        on = bool(command.get("on", False))
+        pattern = command.get("pattern")
+    else:
+        on = bool(command)
+        pattern = None
+    if not on:
+        return "off"
+    return "continuous" if pattern == "continuous" else "beep"
+
+
+class Buzzer:
+    """Buzzer on BUZZER_PIN: off, beeping, or solid. Call update() often (~20 ms).
+
+    Beeping is driven by the clock rather than sleeps, so the main loop keeps
+    sampling, publishing and listening for commands while it sounds.
+    """
+
+    def __init__(self):
+        self.pin = machine.Pin(config.BUZZER_PIN, machine.Pin.OUT, value=0)
+        self.mode = "off"
+        self.started = time.ticks_ms()
+
+    def set(self, mode):
+        if mode != self.mode:
+            self.mode = mode
+            self.started = time.ticks_ms()  # start every beep sequence on a beep
+            log("buzzer %s" % mode.upper())
+        self.update()
+
+    def update(self):
+        if self.mode == "beep":
+            phase = time.ticks_diff(time.ticks_ms(), self.started) % (
+                config.BUZZER_BEEP_ON_MS + config.BUZZER_BEEP_OFF_MS
+            )
+            self.pin.value(1 if phase < config.BUZZER_BEEP_ON_MS else 0)
+        else:
+            self.pin.value(1 if self.mode == "continuous" else 0)
+
+
+def buzzer_topic():
+    return "clinic/actuators/%s/commands/buzzer" % config.ACTUATOR_ID
+
+
 class Uplink:
     """Publisher for the sensor roles that keeps working through outages.
 
@@ -121,10 +191,15 @@ class Uplink:
     the connection every RECONNECT_DELAY_S, and replays the backlog in order
     (SD_REPLAY_BATCH rows per tick) before sending live readings again.
     Call tick() regularly; send() for each reading.
+
+    With a Buzzer attached it also listens for the server's buzzer commands
+    (clinic/actuators/<ACTUATOR_ID>/commands/buzzer): idle() sleeps while
+    polling for them and keeping the beep pattern going.
     """
 
-    def __init__(self, client):
+    def __init__(self, client, buzzer=None):
         self.client = client
+        self.buzzer = buzzer
         self.up = False
         self.last_try = time.ticks_ms()
 
@@ -141,6 +216,13 @@ class Uplink:
         try:
             connect_client(self.client)
             publish_online(self.client)
+            if self.buzzer is not None:
+                self.client.set_callback(self._on_command)
+                self.client.subscribe(buzzer_topic().encode(), qos=0)
+                # Registers this Pico as an actuator so alerts at its location reach it.
+                self._publish(
+                    actuator_status_topic().encode(), dumps({"state": "online"}).encode()
+                )
             self.up = True
             log("link up")
         except OSError as e:
@@ -148,7 +230,7 @@ class Uplink:
             self._down(e)
 
     def tick(self):
-        """Reconnect if down, then replay a batch of the backlog."""
+        """Reconnect if down, keep the clock synced, then replay a batch of the backlog."""
         if not self.up:
             if time.ticks_diff(time.ticks_ms(), self.last_try) < config.RECONNECT_DELAY_S * 1000:
                 return
@@ -158,6 +240,8 @@ class Uplink:
                 return
             self.connect()
         if self.up:
+            if clock_due():  # retry if the boot sync failed, then daily for drift
+                sync_clock(attempts=1)
             try:
                 sdlog.drain(self._publish, config.SD_REPLAY_BATCH)
             except OSError as e:
@@ -173,6 +257,41 @@ class Uplink:
             except OSError as e:
                 self._down(e)
         sdlog.enqueue(topic, body)
+
+    def _on_command(self, topic, msg):
+        text = msg.decode()
+        log("<- %s %s" % (topic.decode(), text))
+        mode = buzzer_mode(text)
+        self.buzzer.set(mode)
+        try:  # ack; the server just marks the actuator as seen
+            self._publish(
+                actuator_status_topic().encode(),
+                dumps({"state": "ack", "command": "off" if mode == "off" else "on"}).encode(),
+            )
+        except OSError as e:
+            self._down(e)
+
+    def poll(self):
+        """Advance the beep pattern and handle at most one pending command."""
+        if self.buzzer is None:
+            return
+        self.buzzer.update()
+        if not self.up:
+            return
+        try:
+            SimpleClient.check_msg(self.client)
+            # wait_msg() leaves the socket blocking; restore the timeout so a
+            # dead link still raises instead of hanging the next publish.
+            self.client.sock.settimeout(config.MQTT_SOCKET_TIMEOUT_S)
+        except OSError as e:
+            self._down(e)
+
+    def idle(self, seconds):
+        """Sleep `seconds` while polling, so the buzzer and commands stay responsive."""
+        end = time.ticks_add(time.ticks_ms(), int(seconds * 1000))
+        while time.ticks_diff(end, time.ticks_ms()) > 0:
+            self.poll()
+            time.sleep_ms(20)
 
 
 # ---------------------------------------------------------------------------
@@ -235,12 +354,12 @@ def show_oled(temp_c=None, humidity=None, door_open=None):
         return
     oled.fill(0)
     if temp_c is not None:
-        oled.text("Temp: {:.1f} C".format(temp_c), 0, 5)
+        oled.text("Temp: {:.1f} C".format(temp_c), 0, 0)
     if humidity is not None:
-        oled.text("Humidity: {:.1f} %".format(humidity), 0, 20)
+        oled.text("Humidity: {:.1f} %".format(humidity), 0, 16)
     if door_open is not None:
-        oled.text("Door: " + ("OPEN" if door_open else "CLOSED"), 0, 40)
-    oled.text(config.DEVICE_ID, 0, 56)
+        oled.text("Door: " + ("OPEN" if door_open else "CLOSED"), 0, 32)
+    oled.text(local_time_str() or "time not synced", 0, 48)  # SAST
     oled.show()
 
 
@@ -276,13 +395,13 @@ def run_storage(uplink):
             door_topic = "clinic/sensors/%s/telemetry/door" % config.DEVICE_ID
             uplink.send(door_topic, door_payload)
             log("-> %s %s" % (door_topic, door_payload))
-            sdlog.log_history(payload["recordedAt"], config.DEVICE_ID, payload["temperatureC"],
+            sdlog.log_history(local_iso(), config.DEVICE_ID, payload["temperatureC"],
                               payload["humidityPct"], door_open)
 
             show_oled(temp_c, humidity, door_open)
         else:
             log("dht: no reading this cycle")
-        time.sleep(config.READ_INTERVAL_S)
+        uplink.idle(config.READ_INTERVAL_S)
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +422,7 @@ def run_climate(uplink):
             topic = "clinic/sensors/%s/telemetry/climate" % config.SENSOR_ID
             uplink.send(topic, payload)
             log("-> %s %s" % (topic, payload))
-            sdlog.log_history(payload["recordedAt"], config.SENSOR_ID, payload["temp"],
+            sdlog.log_history(local_iso(), config.SENSOR_ID, payload["temp"],
                               payload["humidity"])
         else:
             log("dht: no reading this cycle")
@@ -331,7 +450,7 @@ def run_door(uplink):
         }
         uplink.send(topic, payload)
         log("-> %s %s" % (topic, payload))
-        sdlog.log_history(payload["recordedAt"], config.SENSOR_ID,
+        sdlog.log_history(local_iso(), config.SENSOR_ID,
                           door_open=payload["containerOpen"])
 
     publish_state()  # initial state so the dashboard starts correct
@@ -360,35 +479,28 @@ def run_door(uplink):
 # Role: buzzer (subscribe commands, drive pin, ack)
 # ---------------------------------------------------------------------------
 def run_buzzer(client):
-    buzzer = machine.Pin(config.BUZZER_PIN, machine.Pin.OUT, value=0)
-    cmd_topic = "clinic/actuators/%s/commands/buzzer" % config.ACTUATOR_ID
+    buzzer = Buzzer()
     client.set_callback(None)
-    client.subscribe(cmd_topic.encode(), qos=0)
-    log("listening on %s" % cmd_topic)
-
-    def set_buzzer(on):
-        buzzer.value(1 if on else 0)
-        log("buzzer %s" % ("ON" if on else "OFF"))
+    client.subscribe(buzzer_topic().encode(), qos=0)
+    log("listening on %s" % buzzer_topic())
 
     def on_command(topic, msg):
         text = msg.decode()
         log("<- %s %s" % (topic.decode(), text))
-        try:
-            command = json.loads(text)
-            on = bool(command.get("on", False))
-        except ValueError:
-            on = text.strip().lower() in ("on", "true", "1")
-        set_buzzer(on)
+        mode = buzzer_mode(text)
+        buzzer.set(mode)
         # Ack back to the server (handleBuzzerStatus just marks the actuator seen).
         client.publish(
             actuator_status_topic().encode(),
-            dumps({"state": "ack", "command": "on" if on else "off"}).encode(),
+            dumps({"state": "ack", "command": "off" if mode == "off" else "on"}).encode(),
             qos=0,
         )
 
     client.set_callback(on_command)
     while True:
-        client.wait_msg()  # blocks until a command arrives; reconnects via robust
+        client.check_msg()  # non-blocking, so the beep pattern keeps running
+        buzzer.update()
+        time.sleep_ms(20)
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +525,8 @@ def run_role_forever():
         return
     # Sensor roles sample even if the broker is unreachable right now: the
     # uplink queues to the SD card and keeps retrying the connection.
-    uplink = Uplink(client)
+    buzzer = Buzzer() if config.ROLE == ROLE_STORAGE and config.STORAGE_HAS_BUZZER else None
+    uplink = Uplink(client, buzzer)
     uplink.connect()
     runner(uplink)
 

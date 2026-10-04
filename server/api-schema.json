@@ -821,9 +821,9 @@
           "fridgeMin": { "type": "number", "example": 2 },
           "fridgeMax": { "type": "number", "example": 8 },
           "roomMax": { "type": "number", "example": 25 },
-          "doorOpenLimitMin": { "type": "number", "example": 5 }
+          "doorOpenLimitSec": { "type": "number", "example": 10 }
         },
-        "required": ["fridgeMin", "fridgeMax", "roomMax", "doorOpenLimitMin"]
+        "required": ["fridgeMin", "fridgeMax", "roomMax", "doorOpenLimitSec"]
       },
       "NotificationSettingsDto": {
         "type": "object",
