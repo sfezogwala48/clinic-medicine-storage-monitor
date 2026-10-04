@@ -29,8 +29,8 @@ export class UsersService {
   ) {}
 
   async seed(): Promise<void> {
-    // Only the admin is seeded. All other users are created manually
-    // (POST /api/users, admin only).
+    // The three demo accounts (one per role) are seeded on first boot.
+    // Additional users are created manually (POST /api/users, admin only).
     if ((await this.users.count()) === 0) {
       await this.users.save([
         {
@@ -40,6 +40,22 @@ export class UsersService {
           status: "Active",
           lastLoginAt: null,
           passwordHash: await hashPassword(seedPassword("admin")),
+        },
+        {
+          name: "Sr. Naidoo",
+          role: "supervisor",
+          contact: "+27721111111",
+          status: "Active",
+          lastLoginAt: null,
+          passwordHash: await hashPassword(seedPassword("supervisor")),
+        },
+        {
+          name: "Nurse Khumalo",
+          role: "staff",
+          contact: "+27730000000",
+          status: "Active",
+          lastLoginAt: null,
+          passwordHash: await hashPassword(seedPassword("staff")),
         },
       ]);
     } else {

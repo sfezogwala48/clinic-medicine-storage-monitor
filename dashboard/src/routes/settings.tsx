@@ -196,13 +196,6 @@ function EmailJsPanel() {
           </span>
         )}
       </div>
-      {!status.loading && !configured && (
-        <p className="text-xs text-muted-foreground">
-          Set EMAILJS_SERVICE_ID + EMAILJS_TEMPLATE_ID in server/.env (public/private keys are
-          already set). Your template must accept: to_email, subject, alert_id, sensor_id,
-          alert_type, severity, message.
-        </p>
-      )}
       <div className="flex gap-2">
         <Input
           type="email"

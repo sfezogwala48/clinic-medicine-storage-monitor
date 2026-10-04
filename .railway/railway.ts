@@ -34,6 +34,8 @@ export default defineRailway(() => {
       // Secrets — set real values in the Railway dashboard; never commit them.
       JWT_SECRET: preserve(),
       SEED_ADMIN_PASSWORD: preserve(),
+      SEED_SUPERVISOR_PASSWORD: preserve(),
+      SEED_STAFF_PASSWORD: preserve(),
     },
     volumeMounts: {
       "/app/data": serverData,

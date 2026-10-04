@@ -9,6 +9,8 @@ process.env.DATABASE_PATH ??= ":memory:";
 // Credential tests need the same secrets the server requires at boot.
 process.env.JWT_SECRET ??= "e2e-test-secret-change-me";
 process.env.SEED_ADMIN_PASSWORD ??= "Admin123!";
+process.env.SEED_SUPERVISOR_PASSWORD ??= "Supervisor123!";
+process.env.SEED_STAFF_PASSWORD ??= "Staff123!";
 
 describe("Auth (e2e)", () => {
   let app: INestApplication;

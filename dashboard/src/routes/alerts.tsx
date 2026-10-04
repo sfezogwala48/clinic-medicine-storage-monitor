@@ -91,10 +91,6 @@ function AlertsPage() {
             </button>
           ))}
         </div>
-        <p className="text-sm text-muted-foreground">
-          {alerts.live ? "Live from server" : "Backend unreachable"} · acknowledging an alert
-          resolves it and silences buzzers at that location.
-        </p>
       </div>
 
       {ackError && (
@@ -229,9 +225,6 @@ function AlertsPage() {
             </Button>
           )}
         </h2>
-        <p className="mb-2 text-sm text-muted-foreground">
-          Email + buzzer dispatch log — click an alert row to filter by <code>?alertId=…</code>.
-        </p>
         <Card>
           <CardContent className="p-0">
             <Table>

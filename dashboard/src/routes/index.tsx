@@ -4,9 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Droplets, Thermometer, TriangleAlert, Wifi } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -20,16 +19,16 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
   formatTime,
   formatTimeOnly,
-  getAccessLog,
   getDashboardSummary,
   getSensors,
   getTemperatureTrend,
+  getThresholds,
   useApiQuery,
 } from "@/lib/api";
+import { EMPTY_THRESHOLDS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({ component: DashboardPage });
@@ -82,8 +81,6 @@ function StatCard({
   );
 }
 
-const THRESHOLD = 25;
-
 const trendChartConfig = {
   temp: {
     label: "Temperature",
@@ -96,9 +93,9 @@ interface TrendDatum {
   temp: number;
 }
 
-function TempTrendChart({ data }: { data: TrendDatum[] }) {
+function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: number | null }) {
   return (
-    <ChartContainer config={trendChartConfig} className="min-h-[220px] w-full">
+    <ChartContainer config={trendChartConfig} className="max-h-[340px] min-h-[220px] w-full">
       <AreaChart accessibilityLayer data={data} margin={{ left: 0, right: 8 }}>
         <defs>
           <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
@@ -136,18 +133,20 @@ function TempTrendChart({ data }: { data: TrendDatum[] }) {
             />
           }
         />
-        <ReferenceLine
-          y={THRESHOLD}
-          stroke="var(--color-destructive)"
-          strokeDasharray="6 4"
-          label={{
-            value: `Limit ${THRESHOLD}°`,
-            position: "insideTopRight",
-            fill: "var(--color-destructive)",
-            fontSize: 11,
-            fontWeight: 600,
-          }}
-        />
+        {threshold != null && (
+          <ReferenceLine
+            y={threshold}
+            stroke="var(--color-destructive)"
+            strokeDasharray="6 4"
+            label={{
+              value: `Limit ${threshold}°`,
+              position: "insideTopRight",
+              fill: "var(--color-destructive)",
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          />
+        )}
         <Area
           dataKey="temp"
           type="monotone"
@@ -195,9 +194,11 @@ function DashboardPage() {
     { unit: "°C", intervalMinutes: 0, limit: 0, points: [] },
     { deps: [effectiveSensor, trendRange], pollMs: 30_000 },
   );
-  const access = useApiQuery(() => getAccessLog(3), [], { pollMs: 15_000 });
+  const thresholds = useApiQuery(getThresholds, EMPTY_THRESHOLDS, { pollMs: 30_000 });
 
   const s = summary.data;
+  const roomMax = thresholds.live ? thresholds.data.roomMax : null;
+  const aboveRoomMax = s.avgTemp != null && roomMax != null && s.avgTemp > roomMax;
   const chartData: TrendDatum[] = (trend.live ? trend.data.points : []).map((p) => ({
     label: p.time ? formatTimeOnly(p.time).slice(0, 5) : "",
     temp: p.temp,
@@ -226,8 +227,8 @@ function DashboardPage() {
           icon={<Thermometer className="h-4 w-4" />}
           title="Avg Temperature"
           value={s.avgTemp == null ? "--" : `${s.avgTemp.toFixed(1)}°C`}
-          sub={s.avgTemp != null && s.avgTemp > 25 ? "Above 25° room limit" : "Within safe range"}
-          tone={s.avgTemp != null && s.avgTemp > 25 ? "warning" : "success"}
+          sub={aboveRoomMax ? `Above ${roomMax}° room limit` : "Within safe range"}
+          tone={aboveRoomMax ? "warning" : "success"}
         />
         <StatCard
           icon={<Droplets className="h-4 w-4" />}
@@ -252,114 +253,66 @@ function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base">Temperature Trend</CardTitle>
-                <CardDescription>
-                  {effectiveSensor || "—"} — last {trendRange} ({trend.data.unit}, every{" "}
-                  {trend.data.intervalMinutes || "--"} min)
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Select
-                  value={effectiveSensor}
-                  onValueChange={setTrendSensor}
-                  disabled={trendSensorIds.length === 0}
-                >
-                  <SelectTrigger aria-label="Trend sensor" className="w-[130px]">
-                    <SelectValue placeholder="No sensors" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {trendSensorIds.map((id) => (
-                      <SelectItem key={id} value={id}>
-                        {id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex overflow-hidden rounded-md border border-input text-sm">
-                  {(["24h", "7d"] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setTrendRange(r)}
-                      className={cn(
-                        "px-2.5 py-1",
-                        trendRange === r ? "bg-primary text-primary-foreground" : "bg-background",
-                      )}
-                    >
-                      {r}
-                    </button>
+      <Card>
+        <CardHeader className="pb-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Temperature Trend</CardTitle>
+            </div>
+            <div className="flex gap-2">
+              <Select
+                value={effectiveSensor}
+                onValueChange={setTrendSensor}
+                disabled={trendSensorIds.length === 0}
+              >
+                <SelectTrigger aria-label="Trend sensor" className="w-[130px]">
+                  <SelectValue placeholder="No sensors" />
+                </SelectTrigger>
+                <SelectContent>
+                  {trendSensorIds.map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {id}
+                    </SelectItem>
                   ))}
-                </div>
+                </SelectContent>
+              </Select>
+              <div className="flex overflow-hidden rounded-md border border-input text-sm">
+                {(["24h", "7d"] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setTrendRange(r)}
+                    className={cn(
+                      "px-2.5 py-1",
+                      trendRange === r ? "bg-primary text-primary-foreground" : "bg-background",
+                    )}
+                  >
+                    {r}
+                  </button>
+                ))}
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {trend.loading ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">Loading trend…</p>
-            ) : chartData.length === 0 ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">
-                {effectiveSensor ? (
-                  <>
-                    No trend data yet — publish telemetry for {effectiveSensor} to populate this
-                    chart.
-                  </>
-                ) : (
-                  "No climate sensors registered yet — onboard one from Real-Time Sensor Monitoring."
-                )}
-              </p>
-            ) : (
-              <TempTrendChart data={chartData} />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Recent Access Events</CardTitle>
-            <CardDescription>Latest container activity</CardDescription>
-          </CardHeader>
-          <CardContent className="px-2 pb-2">
-            <Table>
-              <TableBody>
-                {access.loading ? (
-                  <TableRow>
-                    <TableCell className="py-6 text-center text-sm text-muted-foreground">
-                      Loading access events…
-                    </TableCell>
-                  </TableRow>
-                ) : access.data.length === 0 ? (
-                  <TableRow>
-                    <TableCell className="py-6 text-center text-sm text-muted-foreground">
-                      No access events yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  access.data.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>
-                        <div className="font-semibold tabular-nums">{formatTime(log.time)}</div>
-                        <div className="text-xs text-muted-foreground">{log.container}</div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          variant={log.reason.includes("Unauthorized") ? "critical" : "success"}
-                        >
-                          {log.reason}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {trend.loading ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">Loading trend…</p>
+          ) : chartData.length === 0 ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              {effectiveSensor ? (
+                <>
+                  No trend data yet — publish telemetry for {effectiveSensor} to populate this
+                  chart.
+                </>
+              ) : (
+                "No climate sensors registered yet — onboard one from Real-Time Sensor Monitoring."
+              )}
+            </p>
+          ) : (
+            <TempTrendChart data={chartData} threshold={roomMax} />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
