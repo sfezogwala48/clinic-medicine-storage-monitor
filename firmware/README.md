@@ -22,6 +22,9 @@ firmware/
 ├── config.py        # <-- the only file you edit (WiFi, broker, role, pins, IDs)
 ├── main.py          # role logic + WiFi/MQTT reconnect loop
 ├── net.py           # WiFi, NTP clock sync, ISO-UTC timestamp helper
+├── sdlog.py         # microSD history log + offline backlog (uses sdcard.py)
+├── sdcard.py        # SPI microSD driver
+├── ssd1306.py       # OLED driver (storage role)
 └── umqtt/           # vendored MicroPython MQTT client (same as mqtt-tester/umqtt)
     ├── simple.py
     └── robust.py
@@ -91,8 +94,20 @@ uvx mpremote
   `NotificationsService` and drives the pin. Publishes an ack to
   `clinic/actuators/<id>/status` per command. The buzzer is force-silenced if
   the connection drops.
-- **Resilience**: `umqtt.robust` handles MQTT-level reconnects; if WiFi itself
-  drops, `main()` re-associates and rebuilds the session. No reset needed.
+- **Resilience**: the buzzer uses `umqtt.robust` for MQTT-level reconnects; if
+  WiFi itself drops, `main()` re-associates and rebuilds the session. No reset
+  needed.
+- **SD card** (`SD_ENABLED`, SPI0 pins in `config.py`; optional, the firmware
+  runs without a card): sensor roles append every reading to
+  `SD_LOG_FILE` (CSV: `recordedAt,source,temperatureC,humidityPct,doorOpen`).
+  While the link is down they keep sampling and queue the unsent messages in
+  `SD_BACKLOG_FILE`; after reconnecting they replay the backlog oldest-first
+  (`SD_REPLAY_BATCH` rows per cycle) with their original `recordedAt`, then
+  resume live publishing. Replay progress is saved, so a reboot mid-replay
+  does not resend rows. Neither file is trimmed automatically.
+- **Limits**: the clock is only set by NTP at boot, so the device must have
+  WiFi when it starts (outages _after_ boot are covered). Messages are QoS 0,
+  so a reading sent in the moment the link dies can still be lost.
 
 ## Testing end-to-end
 

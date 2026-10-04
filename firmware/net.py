@@ -37,6 +37,16 @@ def wifi_ok():
     return network.WLAN(network.STA_IF).isconnected()
 
 
+def wifi_nudge():
+    """Start re-associating without waiting for it; poll wifi_ok() later."""
+    import network
+
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if not wlan.isconnected() and wlan.status() != network.STAT_CONNECTING:
+        wlan.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
+
+
 def sync_clock():
     """Best-effort NTP sync so `recordedAt` timestamps are real UTC.
 

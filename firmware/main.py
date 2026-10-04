@@ -16,9 +16,12 @@ server/src/notifications/notification.dto.ts. Sensor roles publish a
 retained online status on connect and register a retained offline last-will
 so the server's clinic/sensors/<id>/status handler sees both edges.
 
-Behavior on failure: umqtt.robust reconnects the MQTT session on its own; if
-WiFi itself drops (OSError bubbles up), main() re-establishes WiFi and
-rebuilds the session. The device never needs a reset to recover.
+Behavior on failure: the sensor roles keep sampling while the link is down.
+Every reading is appended to the microSD history (sdlog.py); readings that
+cannot be sent are queued on the card and replayed, oldest first, once the
+session is back. Sensor roles reconnect through Uplink below; the buzzer
+relies on umqtt.robust. If something else breaks, main() re-establishes WiFi
+and rebuilds the session. The device never needs a reset to recover.
 """
 
 import json
@@ -26,8 +29,10 @@ import time
 
 import config
 import machine
-from net import connect_wifi, iso_utc, sync_clock, wifi_ok
+import sdlog
+from net import connect_wifi, iso_utc, sync_clock, wifi_nudge, wifi_ok
 from umqtt.robust import MQTTClient
+from umqtt.simple import MQTTClient as SimpleClient
 
 # ---------------------------------------------------------------------------
 # Role constants (match config.ROLE)
@@ -66,7 +71,7 @@ def actuator_status_topic():
 
 
 def make_client():
-    """Build + connect the MQTT session for the configured role."""
+    """Build the MQTT client for the configured role (not connected yet)."""
     client = MQTTClient(
         "pico-%s-%s" % (config.ROLE, config.DEVICE_ID),
         config.MQTT_BROKER,
@@ -83,21 +88,91 @@ def make_client():
             sensor_status_topic(), dumps({"online": False}), retain=True, qos=0
         )
 
-    client.connect(clean_session=False)
+    return client
+
+
+def connect_client(client):
+    # A socket timeout makes a dead link raise OSError instead of hanging, but
+    # the buzzer blocks on wait_msg() between commands, so it must not have one.
+    timeout = None if config.ROLE == ROLE_BUZZER else config.MQTT_SOCKET_TIMEOUT_S
+    client.connect(clean_session=False, timeout=timeout)
     log("mqtt: connected to %s:%s as %s (%s role)" % (
         config.MQTT_BROKER, config.MQTT_PORT, client.client_id, config.ROLE))
-    return client
 
 
 def publish_online(client):
     if config.ROLE != ROLE_BUZZER:
-        client.publish(
+        # SimpleClient, not robust: raise on failure rather than retry forever.
+        SimpleClient.publish(
+            client,
             sensor_status_topic().encode(),
             dumps({"online": True}).encode(),
             retain=True,
             qos=0,
         )
     blink(2)
+
+
+class Uplink:
+    """Publisher for the sensor roles that keeps working through outages.
+
+    umqtt.robust would retry a failed publish forever, stalling sampling for
+    the whole outage. Uplink instead queues readings on the SD card, retries
+    the connection every RECONNECT_DELAY_S, and replays the backlog in order
+    (SD_REPLAY_BATCH rows per tick) before sending live readings again.
+    Call tick() regularly; send() for each reading.
+    """
+
+    def __init__(self, client):
+        self.client = client
+        self.up = False
+        self.last_try = time.ticks_ms()
+
+    def _down(self, e):
+        if self.up:
+            log("link down, queueing readings on SD: %r" % e)
+        self.up = False
+        self.last_try = time.ticks_ms()
+
+    def _publish(self, topic, body):
+        SimpleClient.publish(self.client, topic, body, False, 0)
+
+    def connect(self):
+        try:
+            connect_client(self.client)
+            publish_online(self.client)
+            self.up = True
+            log("link up")
+        except OSError as e:
+            log("mqtt: connect failed: %r" % e)
+            self._down(e)
+
+    def tick(self):
+        """Reconnect if down, then replay a batch of the backlog."""
+        if not self.up:
+            if time.ticks_diff(time.ticks_ms(), self.last_try) < config.RECONNECT_DELAY_S * 1000:
+                return
+            self.last_try = time.ticks_ms()
+            if not wifi_ok():
+                wifi_nudge()
+                return
+            self.connect()
+        if self.up:
+            try:
+                sdlog.drain(self._publish, config.SD_REPLAY_BATCH)
+            except OSError as e:
+                self._down(e)
+
+    def send(self, topic, payload):
+        body = dumps(payload)
+        # While a backlog exists new readings queue behind it to keep order.
+        if self.up and not sdlog.has_backlog():
+            try:
+                self._publish(topic.encode(), body.encode())
+                return
+            except OSError as e:
+                self._down(e)
+        sdlog.enqueue(topic, body)
 
 
 # ---------------------------------------------------------------------------
@@ -130,10 +205,53 @@ def read_temp_humidity():
 
 
 # ---------------------------------------------------------------------------
+# SSD1306 OLED local display helper (storage role)
+# ---------------------------------------------------------------------------
+_oled = None
+
+
+def oled_display():
+    global _oled
+    if _oled is None:
+        from machine import I2C, Pin
+        import ssd1306
+
+        try:
+            i2c = I2C(0, scl=Pin(config.OLED_SCL_PIN), sda=Pin(config.OLED_SDA_PIN), freq=config.OLED_I2C_FREQ)
+            _oled = ssd1306.SSD1306_I2C(128, 64, i2c, addr=config.OLED_ADDR)
+            _oled.fill(0)
+            _oled.text("Booting...", 0, 30)
+            _oled.show()
+        except Exception as e:
+            log("oled: init failed: %r" % e)
+            _oled = None
+    return _oled
+
+
+def show_oled(temp_c=None, humidity=None, door_open=None):
+    """Refresh the local display; silently skip if the OLED is absent."""
+    oled = oled_display()
+    if oled is None:
+        return
+    oled.fill(0)
+    if temp_c is not None:
+        oled.text("Temp: {:.1f} C".format(temp_c), 0, 5)
+    if humidity is not None:
+        oled.text("Humidity: {:.1f} %".format(humidity), 0, 20)
+    if door_open is not None:
+        oled.text("Door: " + ("OPEN" if door_open else "CLOSED"), 0, 40)
+    oled.text(config.DEVICE_ID, 0, 56)
+    oled.show()
+
+
+# ---------------------------------------------------------------------------
 # Role: storage (clinic/storage/<id>/telemetry)
 # ---------------------------------------------------------------------------
-def run_storage(client):
+def run_storage(uplink):
+    reed = machine.Pin(config.DOOR_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
+
     while True:
+        uplink.tick()
         reading = read_temp_humidity()
         if reading is not None:
             temp_c, humidity = reading
@@ -144,8 +262,24 @@ def run_storage(client):
                 "recordedAt": iso_utc(),
             }
             topic = "clinic/storage/%s/telemetry" % config.DEVICE_ID
-            client.publish(topic.encode(), dumps(payload).encode(), qos=0)
+            uplink.send(topic, payload)
             log("-> %s %s" % (topic, payload))
+
+            door_open = reed.value() == 1
+            if not config.DOOR_CLOSED_WHEN_LOW:
+                door_open = not door_open
+            door_payload = {
+                "sensorId": config.DEVICE_ID,
+                "containerOpen": door_open,
+                "recordedAt": iso_utc(),
+            }
+            door_topic = "clinic/sensors/%s/telemetry/door" % config.DEVICE_ID
+            uplink.send(door_topic, door_payload)
+            log("-> %s %s" % (door_topic, door_payload))
+            sdlog.log_history(payload["recordedAt"], config.DEVICE_ID, payload["temperatureC"],
+                              payload["humidityPct"], door_open)
+
+            show_oled(temp_c, humidity, door_open)
         else:
             log("dht: no reading this cycle")
         time.sleep(config.READ_INTERVAL_S)
@@ -154,8 +288,9 @@ def run_storage(client):
 # ---------------------------------------------------------------------------
 # Role: climate (clinic/sensors/<id>/telemetry/climate)
 # ---------------------------------------------------------------------------
-def run_climate(client):
+def run_climate(uplink):
     while True:
+        uplink.tick()
         reading = read_temp_humidity()
         if reading is not None:
             temp_c, humidity = reading
@@ -166,8 +301,10 @@ def run_climate(client):
                 "recordedAt": iso_utc(),
             }
             topic = "clinic/sensors/%s/telemetry/climate" % config.SENSOR_ID
-            client.publish(topic.encode(), dumps(payload).encode(), qos=0)
+            uplink.send(topic, payload)
             log("-> %s %s" % (topic, payload))
+            sdlog.log_history(payload["recordedAt"], config.SENSOR_ID, payload["temp"],
+                              payload["humidity"])
         else:
             log("dht: no reading this cycle")
         time.sleep(config.READ_INTERVAL_S)
@@ -176,7 +313,7 @@ def run_climate(client):
 # ---------------------------------------------------------------------------
 # Role: door (clinic/sensors/<id>/telemetry/door)
 # ---------------------------------------------------------------------------
-def run_door(client):
+def run_door(uplink):
     pin = machine.Pin(config.DOOR_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
     topic = "clinic/sensors/%s/telemetry/door" % config.SENSOR_ID
 
@@ -192,15 +329,21 @@ def run_door(client):
             "containerOpen": door_open(),
             "recordedAt": iso_utc(),
         }
-        client.publish(topic.encode(), dumps(payload).encode(), qos=0)
+        uplink.send(topic, payload)
         log("-> %s %s" % (topic, payload))
+        sdlog.log_history(payload["recordedAt"], config.SENSOR_ID,
+                          door_open=payload["containerOpen"])
 
     publish_state()  # initial state so the dashboard starts correct
     last_state = door_open()
     last_sent = time.ticks_ms()
+    last_tick = last_sent
 
     while True:
         time.sleep_ms(20)
+        if time.ticks_diff(time.ticks_ms(), last_tick) > 2000:
+            uplink.tick()  # reconnect / replay even when the door is quiet
+            last_tick = time.ticks_ms()
         state = door_open()
         if state != last_state:
             time.sleep_ms(config.DOOR_DEBOUNCE_MS)
@@ -260,16 +403,32 @@ ROLE_RUNNERS = {
 
 
 def run_role_forever():
-    """Create a session and run the role until the connection breaks."""
+    """Create a session and run the role until something unexpected breaks."""
     client = make_client()
-    publish_online(client)
-    ROLE_RUNNERS[config.ROLE](client)
+    runner = ROLE_RUNNERS[config.ROLE]
+    if config.ROLE == ROLE_BUZZER:
+        connect_client(client)
+        publish_online(client)
+        runner(client)
+        return
+    # Sensor roles sample even if the broker is unreachable right now: the
+    # uplink queues to the SD card and keeps retrying the connection.
+    uplink = Uplink(client)
+    uplink.connect()
+    runner(uplink)
 
 
 def main():
     log("firmware starting: role=%s id=%s" % (config.ROLE, config.DEVICE_ID))
+    if config.ROLE == ROLE_STORAGE:
+        oled_display()
     connect_wifi()
+
+    if config.ROLE == ROLE_STORAGE:
+        show_oled(temp_c=None, humidity=None, door_open=None)
     sync_clock()
+    if config.ROLE != ROLE_BUZZER:
+        sdlog.mount()
 
     runner = ROLE_RUNNERS.get(config.ROLE)
     if runner is None:

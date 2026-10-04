@@ -26,14 +26,14 @@ ACTUATOR_ID = DEVICE_ID        # used by the buzzer role
 # ---------------------------------------------------------------------------
 # WiFi (Pico W onboard CYW43 radio)
 # ---------------------------------------------------------------------------
-WIFI_SSID = "YOUR_WIFI_SSID"
-WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"
+WIFI_SSID = "1234"
+WIFI_PASSWORD = "1234567890"
 
 # ---------------------------------------------------------------------------
 # MQTT broker (the NestJS server subscribes here; defaults match compose.yaml)
 # ---------------------------------------------------------------------------
-MQTT_BROKER = "192.168.1.10"   # IP of the machine running `server/` (not "localhost"!)
-MQTT_PORT = 1883
+MQTT_BROKER = "junction.proxy.rlwy.net"   # IP of the machine running `server/` (not "localhost"!)
+MQTT_PORT = 19875
 MQTT_USER = None               # set to a string if mosquitto requires auth
 MQTT_PASSWORD = None
 
@@ -41,25 +41,49 @@ MQTT_PASSWORD = None
 # is the safe default; the broker will not age the connection out.
 MQTT_KEEPALIVE = 0
 
+# Socket timeout for the sensor roles, so a dead link raises OSError (and the
+# reading goes to the SD backlog) instead of hanging. Not used by the buzzer,
+# which blocks waiting for commands.
+MQTT_SOCKET_TIMEOUT_S = 10
+
 # ---------------------------------------------------------------------------
 # Sensors / actuators (GPIO pins, BCM numbering)
 # ---------------------------------------------------------------------------
 # DHT22 (AM2302) or DHT11 temperature + humidity sensor. Used by the
 # "storage" and "climate" roles.
 SENSOR_TYPE = "dht22"          # "dht22" | "dht11"
-DHT_PIN = 15                   # data pin; 4.7k-10k pull-up between DATA and 3V3
+DHT_PIN = 28                   # data pin; 4.7k-10k pull-up between DATA and 3V3
 
 # Reed / magnetic door switch for the "door" role. Wire the switch between
 # the pin and GND; the internal pull-up keeps the pin HIGH while the door is
 # open (magnet away, switch open).
-DOOR_PIN = 14
+DOOR_PIN = 3
 DOOR_CLOSED_WHEN_LOW = True    # switch closed (LOW) = door closed. Flip if yours differs.
 DOOR_DEBOUNCE_MS = 80
 DOOR_HEARTBEAT_S = 300         # re-publish current state this often even if unchanged
 
 # Active buzzer (or relay driving a siren) for the "buzzer" role.
 # HIGH = sounding.
-BUZZER_PIN = 13
+BUZZER_PIN = 4
+
+# SSD1306 OLED (128x64) local display, I2C0.
+OLED_SDA_PIN = 0
+OLED_SCL_PIN = 1
+OLED_I2C_FREQ = 400000
+OLED_ADDR = 0x3C
+
+# microSD card (SPI0): CSV history of every reading, plus a backlog of
+# publishes that could not be sent while offline (replayed on reconnect).
+# With no card inserted the firmware carries on without it.
+SD_ENABLED = True
+SD_MISO_PIN = 16
+SD_CS_PIN = 17
+SD_SCK_PIN = 18
+SD_MOSI_PIN = 19
+SD_MOUNT_PATH = "/sd"
+SD_LOG_FILE = "/sd/telemetry.csv"
+SD_BACKLOG_FILE = "/sd/backlog.txt"
+SD_REPLAY_BATCH = 200          # backlog rows re-sent per cycle while catching up
 
 # ---------------------------------------------------------------------------
 # Timing
