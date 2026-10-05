@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { AlertEntity } from "../alerts/alert.entity.js";
 import { ReadingEntity } from "../readings/reading.entity.js";
 import { SensorEntity } from "../sensors/sensor.entity.js";
+import { SettingsService } from "../settings/settings.service.js";
 
 @Injectable()
 export class DashboardService {
@@ -11,6 +12,7 @@ export class DashboardService {
     @InjectRepository(ReadingEntity) private readonly readings: Repository<ReadingEntity>,
     @InjectRepository(AlertEntity) private readonly alerts: Repository<AlertEntity>,
     @InjectRepository(SensorEntity) private readonly sensors: Repository<SensorEntity>,
+    private readonly settings: SettingsService,
   ) {}
 
   async summary(): Promise<{
@@ -35,6 +37,10 @@ export class DashboardService {
       this.sensors.count(),
       this.sensors.count({ where: { status: "Inactive" } }),
     ]);
+    const humidityRange = await this.settings
+      .getThresholds()
+      .then((t) => ({ min: t.humidityMin, max: t.humidityMax }))
+      .catch(() => ({ min: 30, max: 60 }));
     const systemStatus =
       sensorCount === 0 || inactive === sensorCount
         ? "Offline"
@@ -44,7 +50,7 @@ export class DashboardService {
     return {
       avgTemperature: avg(temps),
       avgHumidity: avg(hums),
-      humidityRange: { min: 30, max: 60 },
+      humidityRange,
       activeAlerts: active,
       criticalCount: critical,
       highCount: high,

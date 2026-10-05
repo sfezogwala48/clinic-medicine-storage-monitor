@@ -55,6 +55,8 @@ export interface Thresholds {
   fridgeMin: number;
   fridgeMax: number;
   roomMax: number;
+  humidityMin: number;
+  humidityMax: number;
   doorOpenLimitSec: number;
 }
 
@@ -63,6 +65,8 @@ export const EMPTY_THRESHOLDS: Thresholds = {
   fridgeMin: 0,
   fridgeMax: 0,
   roomMax: 0,
+  humidityMin: 0,
+  humidityMax: 0,
   doorOpenLimitSec: 0,
 };
 

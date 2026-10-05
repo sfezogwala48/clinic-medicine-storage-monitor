@@ -39,7 +39,7 @@ export class ReadingsController {
   }
 
   @Get("temperature-trend")
-  @ApiOperation({ summary: "24h temperature series for the trend chart" })
+  @ApiOperation({ summary: "24h temperature and humidity series for the trend chart" })
   @ApiResponse({ status: 200, type: TemperatureSeriesDto })
   trend(@Query() q: TempTrendQueryDto): Promise<TemperatureSeriesDto> {
     return this.readings.temperatureSeries(q.sensorId, q.range ?? "24h");

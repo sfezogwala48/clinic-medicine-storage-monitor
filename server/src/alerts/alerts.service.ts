@@ -99,7 +99,7 @@ export class AlertsService {
         }),
       );
     }
-    if (humidity < 30 || humidity > 60) {
+    if (humidity < t.humidityMin || humidity > t.humidityMax) {
       raised.push(
         await this.raise({
           sensorId,

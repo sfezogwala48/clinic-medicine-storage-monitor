@@ -19,6 +19,8 @@ export class SettingsService {
         fridgeMin: 2,
         fridgeMax: 8,
         roomMax: 25,
+        humidityMin: 30,
+        humidityMax: 60,
         doorOpenLimitSec: 10,
         updatedAt: new Date().toISOString(),
       });
@@ -42,6 +44,8 @@ export class SettingsService {
     fridgeMin: number;
     fridgeMax: number;
     roomMax: number;
+    humidityMin: number;
+    humidityMax: number;
     doorOpenLimitSec: number;
   }): Promise<ThresholdsEntity> {
     const current = await this.getThresholds();
@@ -50,6 +54,8 @@ export class SettingsService {
       fridgeMin: patch.fridgeMin,
       fridgeMax: patch.fridgeMax,
       roomMax: patch.roomMax,
+      humidityMin: patch.humidityMin,
+      humidityMax: patch.humidityMax,
       doorOpenLimitSec: patch.doorOpenLimitSec,
       updatedAt: new Date().toISOString(),
     });

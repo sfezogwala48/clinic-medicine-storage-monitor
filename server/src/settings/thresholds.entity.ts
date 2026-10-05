@@ -14,6 +14,14 @@ export class ThresholdsEntity {
   @Column({ type: "float" })
   roomMax!: number;
 
+  /** Relative humidity (%) below which "Humidity Out of Range" fires. */
+  @Column({ type: "float", default: 30 })
+  humidityMin!: number;
+
+  /** Relative humidity (%) above which "Humidity Out of Range" fires. */
+  @Column({ type: "float", default: 60 })
+  humidityMax!: number;
+
   /** How long a door may stay open before "Door Left Open" fires, in seconds. */
   @Column({ type: "float", default: 10 })
   doorOpenLimitSec!: number;

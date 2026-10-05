@@ -1,10 +1,20 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsArray, IsBoolean, IsNumber, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsNumber, IsString, Max, Min } from "class-validator";
 
 export class ThresholdsDto {
   @ApiProperty({ example: 2 }) @IsNumber() fridgeMin!: number;
   @ApiProperty({ example: 8 }) @IsNumber() fridgeMax!: number;
   @ApiProperty({ example: 25 }) @IsNumber() roomMax!: number;
+  @ApiProperty({ example: 30, description: "Alert below this relative humidity (%)" })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  humidityMin!: number;
+  @ApiProperty({ example: 60, description: "Alert above this relative humidity (%)" })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  humidityMax!: number;
   @ApiProperty({ example: 10, description: "Seconds a door may stay open before alerting" })
   @IsNumber()
   doorOpenLimitSec!: number;

@@ -146,7 +146,7 @@ export class ReadingsService {
     }));
   }
 
-  /** Downsampled temperature series for the trend chart (newest-first rows -> oldest-first points). */
+  /** Downsampled temperature + humidity series for the trend chart (newest-first rows -> oldest-first points). */
   async temperatureSeries(
     sensorId: string,
     range = "24h",
@@ -156,6 +156,7 @@ export class ReadingsService {
     intervalMinutes: number;
     limit: number;
     points: number[];
+    humidityPoints: (number | null)[];
   }> {
     const hours = range === "7d" ? 24 * 7 : 24;
     const sinceMs = Date.now() - hours * 3600_000;
@@ -166,10 +167,13 @@ export class ReadingsService {
     const source = inRange.length > 0 ? inRange : rows.filter((r) => r.temp != null).slice(-12);
     const intervalMinutes = Math.max(5, Math.round((hours * 60) / 12));
     const points = source.map((r) => Number((r.temp as number).toFixed(1)));
+    const humidityPoints = source.map((r) =>
+      r.humidity != null ? Number(r.humidity.toFixed(1)) : null,
+    );
     const limit = await this.settings
       .getThresholds()
       .then((t) => t.roomMax)
       .catch(() => 25);
-    return { sensorId, unit: "°C", intervalMinutes, limit, points };
+    return { sensorId, unit: "°C", intervalMinutes, limit, points, humidityPoints };
   }
 }

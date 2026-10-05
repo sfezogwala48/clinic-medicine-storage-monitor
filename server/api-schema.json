@@ -690,7 +690,7 @@
             }
           }
         },
-        "summary": "24h temperature series for the trend chart",
+        "summary": "24h temperature and humidity series for the trend chart",
         "tags": ["readings"]
       }
     },
@@ -821,9 +821,26 @@
           "fridgeMin": { "type": "number", "example": 2 },
           "fridgeMax": { "type": "number", "example": 8 },
           "roomMax": { "type": "number", "example": 25 },
+          "humidityMin": {
+            "type": "number",
+            "example": 30,
+            "description": "Alert below this relative humidity (%)"
+          },
+          "humidityMax": {
+            "type": "number",
+            "example": 60,
+            "description": "Alert above this relative humidity (%)"
+          },
           "doorOpenLimitSec": { "type": "number", "example": 10 }
         },
-        "required": ["fridgeMin", "fridgeMax", "roomMax", "doorOpenLimitSec"]
+        "required": [
+          "fridgeMin",
+          "fridgeMax",
+          "roomMax",
+          "humidityMin",
+          "humidityMax",
+          "doorOpenLimitSec"
+        ]
       },
       "NotificationSettingsDto": {
         "type": "object",
@@ -951,9 +968,15 @@
           "unit": { "type": "string", "example": "°C" },
           "intervalMinutes": { "type": "number", "example": 120 },
           "limit": { "type": "number", "example": 25 },
-          "points": { "example": [22, 23, 24], "type": "array", "items": { "type": "string" } }
+          "points": { "example": [22, 23, 24], "type": "array", "items": { "type": "number" } },
+          "humidityPoints": {
+            "example": [45.2, 46, null],
+            "description": "Humidity (%) aligned index-for-index with points; null when a sample has none.",
+            "type": "array",
+            "items": { "type": "number", "nullable": true }
+          }
         },
-        "required": ["sensorId", "unit", "intervalMinutes", "limit", "points"]
+        "required": ["sensorId", "unit", "intervalMinutes", "limit", "points", "humidityPoints"]
       },
       "DashboardSummaryDto": {
         "type": "object",

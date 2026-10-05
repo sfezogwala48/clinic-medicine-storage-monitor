@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/select";
 import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -86,14 +88,45 @@ const trendChartConfig = {
     label: "Temperature",
     color: "var(--chart-1)",
   },
+  humidity: {
+    label: "Humidity",
+    color: "var(--chart-2)",
+  },
 } satisfies ChartConfig;
 
 interface TrendDatum {
   label: string;
   temp: number;
+  humidity: number | null;
 }
 
-function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: number | null }) {
+interface HumidityBand {
+  humidityMin: number;
+  humidityMax: number;
+}
+
+/** Humidity axis domain: covers the observed values and the alert band, clamped to 0–100 % RH. */
+function humidityDomain(data: TrendDatum[], band: HumidityBand | null): [number, number] {
+  const values = data
+    .map((d) => d.humidity)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (band) values.push(band.humidityMin, band.humidityMax);
+  if (values.length === 0) return [0, 100];
+  return [
+    Math.max(0, Math.floor(Math.min(...values) - 2)),
+    Math.min(100, Math.ceil(Math.max(...values) + 2)),
+  ];
+}
+
+function TempTrendChart({
+  data,
+  threshold,
+  humidityBand,
+}: {
+  data: TrendDatum[];
+  threshold: number | null;
+  humidityBand: HumidityBand | null;
+}) {
   return (
     <ChartContainer config={trendChartConfig} className="max-h-[340px] min-h-[220px] w-full">
       <AreaChart accessibilityLayer data={data} margin={{ left: 0, right: 8 }}>
@@ -101,6 +134,10 @@ function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: nu
           <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-temp)" stopOpacity={0.35} />
             <stop offset="100%" stopColor="var(--color-temp)" stopOpacity={0.02} />
+          </linearGradient>
+          <linearGradient id="humidityFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-humidity)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--color-humidity)" stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} />
@@ -112,6 +149,7 @@ function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: nu
           minTickGap={32}
         />
         <YAxis
+          yAxisId="temp"
           width={40}
           tickLine={false}
           axisLine={{ stroke: "var(--color-border)" }}
@@ -121,20 +159,33 @@ function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: nu
             (dataMax: number) => Math.ceil(dataMax + 1),
           ]}
         />
+        <YAxis
+          yAxisId="humidity"
+          orientation="right"
+          width={40}
+          tickLine={false}
+          axisLine={{ stroke: "var(--color-border)" }}
+          tickFormatter={(v: number) => `${v}%`}
+          domain={humidityDomain(data, humidityBand)}
+        />
         <ChartTooltip
           cursor={false}
           content={
             <ChartTooltipContent
               indicator="line"
-              formatter={(value) => {
+              formatter={(value, name, item) => {
                 const num = typeof value === "number" ? value : Number(value);
-                return Number.isFinite(num) ? `${num}°C` : "";
+                if (!Number.isFinite(num)) return "";
+                return String(item?.dataKey ?? name) === "humidity"
+                  ? `Humidity ${num}%`
+                  : `Temperature ${num}°C`;
               }}
             />
           }
         />
         {threshold != null && (
           <ReferenceLine
+            yAxisId="temp"
             y={threshold}
             stroke="var(--color-destructive)"
             strokeDasharray="6 4"
@@ -147,7 +198,38 @@ function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: nu
             }}
           />
         )}
+        {humidityBand && (
+          <>
+            <ReferenceLine
+              yAxisId="humidity"
+              y={humidityBand.humidityMax}
+              stroke="var(--color-humidity)"
+              strokeDasharray="6 4"
+              label={{
+                value: `Max ${humidityBand.humidityMax}%`,
+                position: "insideTopRight",
+                fill: "var(--color-humidity)",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            />
+            <ReferenceLine
+              yAxisId="humidity"
+              y={humidityBand.humidityMin}
+              stroke="var(--color-humidity)"
+              strokeDasharray="6 4"
+              label={{
+                value: `Min ${humidityBand.humidityMin}%`,
+                position: "insideBottomRight",
+                fill: "var(--color-humidity)",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            />
+          </>
+        )}
         <Area
+          yAxisId="temp"
           dataKey="temp"
           type="monotone"
           stroke="var(--color-temp)"
@@ -156,6 +238,19 @@ function TempTrendChart({ data, threshold }: { data: TrendDatum[]; threshold: nu
           dot={{ r: 3, strokeWidth: 2 }}
           activeDot={{ r: 5 }}
         />
+        <Area
+          yAxisId="humidity"
+          dataKey="humidity"
+          type="monotone"
+          stroke="var(--color-humidity)"
+          strokeWidth={2}
+          strokeDasharray="4 3"
+          fill="url(#humidityFill)"
+          dot={{ r: 2.5, strokeWidth: 2 }}
+          activeDot={{ r: 4 }}
+          connectNulls
+        />
+        <ChartLegend content={<ChartLegendContent />} />
       </AreaChart>
     </ChartContainer>
   );
@@ -199,9 +294,20 @@ function DashboardPage() {
   const s = summary.data;
   const roomMax = thresholds.live ? thresholds.data.roomMax : null;
   const aboveRoomMax = s.avgTemp != null && roomMax != null && s.avgTemp > roomMax;
+  const humidityBand: HumidityBand | null =
+    thresholds.live &&
+    thresholds.data.humidityMin >= 0 &&
+    thresholds.data.humidityMax > thresholds.data.humidityMin
+      ? thresholds.data
+      : null;
+  const humidityOut =
+    s.avgHumidity != null &&
+    humidityBand != null &&
+    (s.avgHumidity < humidityBand.humidityMin || s.avgHumidity > humidityBand.humidityMax);
   const chartData: TrendDatum[] = (trend.live ? trend.data.points : []).map((p) => ({
     label: p.time ? formatTimeOnly(p.time).slice(0, 5) : "",
     temp: p.temp,
+    humidity: p.humidity ?? null,
   }));
   const online =
     s.systemStatus.toLowerCase().includes("on") ||
@@ -234,8 +340,12 @@ function DashboardPage() {
           icon={<Droplets className="h-4 w-4" />}
           title="Avg Humidity"
           value={s.avgHumidity == null ? "--" : `${s.avgHumidity.toFixed(1)}%`}
-          sub="Safe range 30–60%"
-          tone="success"
+          sub={
+            humidityBand
+              ? `Safe range ${humidityBand.humidityMin}–${humidityBand.humidityMax}%`
+              : "Safe range —"
+          }
+          tone={humidityOut ? "warning" : "success"}
         />
         <StatCard
           icon={<TriangleAlert className="h-4 w-4" />}
@@ -257,7 +367,7 @@ function DashboardPage() {
         <CardHeader className="pb-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-base">Temperature Trend</CardTitle>
+              <CardTitle className="text-base">Temperature &amp; Humidity Trend</CardTitle>
             </div>
             <div className="flex gap-2">
               <Select
@@ -309,7 +419,7 @@ function DashboardPage() {
               )}
             </p>
           ) : (
-            <TempTrendChart data={chartData} threshold={roomMax} />
+            <TempTrendChart data={chartData} threshold={roomMax} humidityBand={humidityBand} />
           )}
         </CardContent>
       </Card>

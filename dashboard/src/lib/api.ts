@@ -131,6 +131,7 @@ export interface DashboardSummary {
 export interface TrendPoint {
   time: string;
   temp: number;
+  humidity?: number | null;
 }
 
 export interface TrendResponse {
@@ -257,11 +258,16 @@ export async function getTemperatureTrend(
     `/api/temperature-trend?sensorId=${encodeURIComponent(sensorId)}&range=${range}`,
   );
   const pointsRaw = (raw.points ?? raw.data ?? []) as Array<Record<string, unknown> | number>;
+  const humidityRaw = (raw.humidityPoints ?? raw.humidity_points ?? []) as Array<
+    number | null | undefined
+  >;
   const points: TrendPoint[] = pointsRaw.map((p, i) => {
-    if (typeof p === "number") return { time: "", temp: p };
+    const humidity = num(humidityRaw[i], null);
+    if (typeof p === "number") return { time: "", temp: p, humidity };
     return {
       time: str(p.time ?? p.recordedAt ?? p.recorded_at ?? p.label ?? `+${i}`),
       temp: num(p.temp ?? p.temperature ?? p.value, 0) ?? 0,
+      humidity: humidity ?? num(p.humidity, null),
     };
   });
   return {
@@ -427,6 +433,12 @@ export async function getThresholds(): Promise<Thresholds> {
       num(raw.fridgeMax ?? raw.fridge_max, EMPTY_THRESHOLDS.fridgeMax) ??
       EMPTY_THRESHOLDS.fridgeMax,
     roomMax: num(raw.roomMax ?? raw.room_max, EMPTY_THRESHOLDS.roomMax) ?? EMPTY_THRESHOLDS.roomMax,
+    humidityMin:
+      num(raw.humidityMin ?? raw.humidity_min, EMPTY_THRESHOLDS.humidityMin) ??
+      EMPTY_THRESHOLDS.humidityMin,
+    humidityMax:
+      num(raw.humidityMax ?? raw.humidity_max, EMPTY_THRESHOLDS.humidityMax) ??
+      EMPTY_THRESHOLDS.humidityMax,
     doorOpenLimitSec:
       num(raw.doorOpenLimitSec ?? raw.door_open_limit_sec, EMPTY_THRESHOLDS.doorOpenLimitSec) ??
       EMPTY_THRESHOLDS.doorOpenLimitSec,
@@ -443,6 +455,8 @@ export async function updateThresholds(t: Thresholds): Promise<Thresholds> {
     fridgeMin: num(raw.fridgeMin, t.fridgeMin) ?? t.fridgeMin,
     fridgeMax: num(raw.fridgeMax, t.fridgeMax) ?? t.fridgeMax,
     roomMax: num(raw.roomMax, t.roomMax) ?? t.roomMax,
+    humidityMin: num(raw.humidityMin, t.humidityMin) ?? t.humidityMin,
+    humidityMax: num(raw.humidityMax, t.humidityMax) ?? t.humidityMax,
     doorOpenLimitSec: num(raw.doorOpenLimitSec, t.doorOpenLimitSec) ?? t.doorOpenLimitSec,
   };
 }

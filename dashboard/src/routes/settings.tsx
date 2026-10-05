@@ -39,6 +39,8 @@ function validateThresholds(t: Thresholds): string | null {
     ["Fridge minimum", t.fridgeMin],
     ["Fridge maximum", t.fridgeMax],
     ["Room maximum", t.roomMax],
+    ["Humidity minimum", t.humidityMin],
+    ["Humidity maximum", t.humidityMax],
     ["Door-open limit", t.doorOpenLimitSec],
   ];
   for (const [label, v] of nums) {
@@ -47,6 +49,10 @@ function validateThresholds(t: Thresholds): string | null {
   if (t.fridgeMin >= t.fridgeMax) return "Fridge minimum must be below the maximum.";
   if (t.fridgeMin < -30 || t.fridgeMax > 80) return "Fridge range must stay within -30…80 °C.";
   if (t.roomMax < -30 || t.roomMax > 80) return "Room maximum must stay within -30…80 °C.";
+  if (t.humidityMin >= t.humidityMax) return "Humidity minimum must be below the maximum.";
+  if (t.humidityMin < 0 || t.humidityMax > 100) {
+    return "Humidity range must stay within 0…100 % RH.";
+  }
   if (t.doorOpenLimitSec < 0 || t.doorOpenLimitSec > 3600) {
     return "Door-open limit must be between 0 and 3600 seconds.";
   }
@@ -354,6 +360,26 @@ function SettingsPage() {
               disabled={loading || offline}
               onChange={set("roomMax")}
             />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ThresholdField
+                id="humidity-min"
+                label="Humidity minimum"
+                unit="% RH"
+                hint="Alert when humidity drops below this."
+                value={thresholds.humidityMin}
+                disabled={loading || offline}
+                onChange={set("humidityMin")}
+              />
+              <ThresholdField
+                id="humidity-max"
+                label="Humidity maximum"
+                unit="% RH"
+                hint="Alert when humidity rises above this."
+                value={thresholds.humidityMax}
+                disabled={loading || offline}
+                onChange={set("humidityMax")}
+              />
+            </div>
             <ThresholdField
               id="door-limit"
               label="Door-open limit"

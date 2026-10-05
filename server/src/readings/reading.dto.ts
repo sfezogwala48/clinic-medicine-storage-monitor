@@ -70,4 +70,9 @@ export class TemperatureSeriesDto {
   @ApiProperty({ example: 120 }) intervalMinutes!: number;
   @ApiProperty({ example: 25 }) limit!: number;
   @ApiProperty({ example: [22, 23, 24] }) points!: number[];
+  @ApiProperty({
+    example: [45.2, 46, null],
+    description: "Humidity (%) aligned index-for-index with points; null when a sample has none.",
+  })
+  humidityPoints!: (number | null)[];
 }
