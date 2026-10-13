@@ -82,8 +82,9 @@ uvx mpremote
 
 ## Behavior
 
-- **Timestamps**: the Pico's clock is synced via NTP (`ntptime`) at boot, so
-  `recordedAt` is real UTC in the `2026-01-31T12:00:00Z` format the server ingests.
+- **Timestamps**: the Pico's clock is synced at boot from the server
+  (`GET /health/time`) or NTP and holds local time (SAST), so `recordedAt` is
+  SAST in the `2026-01-31T14:00:00+02:00` format the server ingests.
 - **Presence**: sensor roles publish a retained `{"online": true}` to
   `clinic/sensors/<id>/status` on connect and register a retained
   `{"online": false}` last-will, so the dashboard shows offline when a device
@@ -112,8 +113,8 @@ uvx mpremote
   (`SD_REPLAY_BATCH` rows per cycle) with their original `recordedAt`, then
   resume live publishing. Replay progress is saved, so a reboot mid-replay
   does not resend rows. Neither file is trimmed automatically.
-- **Limits**: the clock is only set by NTP at boot, so the device must have
-  WiFi when it starts (outages _after_ boot are covered). Messages are QoS 0,
+- **Limits**: the clock is only set at boot (server or NTP), so the device must
+  have WiFi when it starts (outages _after_ boot are covered). Messages are QoS 0,
   so a reading sent in the moment the link dies can still be lost.
 
 ## Testing end-to-end

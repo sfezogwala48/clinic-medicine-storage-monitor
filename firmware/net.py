@@ -72,9 +72,10 @@ def _set_rtc(year, month, day, hour, minute, second):
 
 
 def _server_time():
-    """Server UTC via GET /health/time as a (y, m, d, h, mi, s) tuple.
+    """Server SAST via GET /health/time as a (y, m, d, h, mi, s) tuple.
 
-    Plain TCP, so it works on networks that block NTP's UDP port 123.
+    The RTC holds local time, so the parts are used as-is. Plain TCP, so it
+    works on networks that block NTP's UDP port 123.
     """
     import json
     import socket
@@ -99,7 +100,7 @@ def _server_time():
     head, _, body = reply.partition(b"\r\n\r\n")
     if b" 200 " not in head.split(b"\r\n")[0]:
         raise OSError("time api: %r" % head[:40])
-    stamp = json.loads(body)["utc"]  # 2026-01-31T12:00:00Z
+    stamp = json.loads(body)["sast"]  # 2026-01-31T14:00:00+02:00
     parts = (int(stamp[0:4]), int(stamp[5:7]), int(stamp[8:10]),
              int(stamp[11:13]), int(stamp[14:16]), int(stamp[17:19]))
     if parts[0] < 2024:
@@ -107,13 +108,21 @@ def _server_time():
     return parts
 
 
+def _ntp_time():
+    """NTP as a (y, m, d, h, mi, s) tuple shifted to local (SAST)."""
+    import ntptime
+
+    ntptime.settime()  # sets the RTC to UTC
+    return time.gmtime(time.time() + config.LOCAL_UTC_OFFSET_H * 3600)[:6]
+
+
 def sync_clock(attempts=3):
-    """Set the RTC to real UTC; return True on success.
+    """Set the RTC to local time (SAST); return True on success.
 
     Tries the server first (GET /health/time over TCP), then NTP. NTP alone is
     not enough: guest WiFi often blocks UDP 123, and without a sync the Pico
     keeps whatever time it was last given (USB tools set *local* time), which
-    makes every `recordedAt` wrong. While unsynced, iso_utc() returns None so
+    makes every `recordedAt` wrong. While unsynced, iso_sast() returns None so
     the server stamps arrival time instead of trusting a bad clock.
     """
     global _synced, _last_attempt
@@ -122,16 +131,14 @@ def sync_clock(attempts=3):
         try:
             _set_rtc(*_server_time())
             _synced = True
-            print("clock: synced from %s (%s)" % (config.TIME_API_HOST, iso_utc()))
+            print("clock: synced from %s (%s)" % (config.TIME_API_HOST, iso_sast()))
             return True
         except Exception as e:
             print("clock: server sync attempt %d failed: %r" % (attempt + 1, e))
         try:
-            import ntptime
-
-            ntptime.settime()
+            _set_rtc(*_ntp_time())
             _synced = True
-            print("clock: NTP sync ok (%s)" % iso_utc())
+            print("clock: NTP sync ok (%s)" % iso_sast())
             return True
         except Exception as e:  # DNS/DHCP can lag right after boot
             print("clock: NTP attempt %d failed: %r" % (attempt + 1, e))
@@ -139,40 +146,34 @@ def sync_clock(attempts=3):
     return False
 
 
-def iso_utc():
-    """UTC timestamp in the exact format the server ingests: 2026-01-31T12:00:00Z.
+def iso_sast():
+    """Local SAST timestamp in the format the server ingests: 2026-01-31T14:00:00+02:00.
 
     None until the clock has been synced, so callers never publish a made-up time.
     """
     if not _synced:
         return None
     t = time.gmtime()
-    return "%04d-%02d-%02dT%02d:%02d:%02dZ" % t[:6]
-
-
-def _local_tm():
-    return time.gmtime(time.time() + config.LOCAL_UTC_OFFSET_H * 3600)
+    return "%04d-%02d-%02dT%02d:%02d:%02d%+03d:00" % (t[:6] + (config.LOCAL_UTC_OFFSET_H,))
 
 
 def local_time_str():
     """Local wall-clock time for the OLED, e.g. 2026-01-31 14:00; None until synced."""
     if not _synced:
         return None
-    return "%04d-%02d-%02d %02d:%02d" % _local_tm()[:5]
+    return "%04d-%02d-%02d %02d:%02d" % time.gmtime()[:5]
 
 
 def local_hms():
     """Local time of day for console logs, e.g. 14:00:05; None until synced."""
     if not _synced:
         return None
-    return "%02d:%02d:%02d" % _local_tm()[3:6]
+    return "%02d:%02d:%02d" % time.gmtime()[3:6]
 
 
 def local_iso():
     """Local time with its UTC offset, e.g. 2026-01-31T14:00:05+02:00; None until synced.
 
-    For the SD history only. Messages to the server always carry UTC (iso_utc).
+    Used for the SD history; the same local time is what the server receives.
     """
-    if not _synced:
-        return None
-    return "%04d-%02d-%02dT%02d:%02d:%02d%+03d:00" % (_local_tm()[:6] + (config.LOCAL_UTC_OFFSET_H,))
+    return iso_sast()

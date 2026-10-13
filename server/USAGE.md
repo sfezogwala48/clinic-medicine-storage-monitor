@@ -53,6 +53,7 @@ Sensor IDs look like `SEN001`; buzzer IDs like `BUZ-A`. A buzzer serves all sens
 ```
 
 - `temp`: −30…80 °C, `humidity`: 0…100 %. Omit `recordedAt` to use server time.
+- `recordedAt`: the server trusts the device clock. Send SAST local time; if it has no zone the server reads it as SAST (UTC+2) and stores it as `…+02:00`. Timestamps that already carry `Z` or `±HH:MM` are trusted as-is.
 - Ack: `{ "received": true, "deviceId": "SEN002" }` or `{ "received": false, "error": "..." }`.
 
 **Door** (`.../telemetry/door`):

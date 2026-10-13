@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { deviceIdFromTopic, parseReading } from "./reading.js";
+import { deviceIdFromTopic, normalizeDeviceTimestamp, parseReading } from "./reading.js";
 
 const TOPIC = "clinic/storage/fridge-01/telemetry";
 
@@ -14,7 +14,29 @@ describe("deviceIdFromTopic", () => {
   });
 });
 
+describe("normalizeDeviceTimestamp", () => {
+  it("should stamp a naive device timestamp as SAST", () => {
+    expect(normalizeDeviceTimestamp("2026-09-06T08:15:00")).toBe("2026-09-06T08:15:00+02:00");
+  });
+
+  it("should trust a timestamp that already carries a zone", () => {
+    expect(normalizeDeviceTimestamp("2026-09-06T08:15:00Z")).toBe("2026-09-06T08:15:00Z");
+    expect(normalizeDeviceTimestamp("2026-09-06T08:15:00+02:00")).toBe("2026-09-06T08:15:00+02:00");
+  });
+});
+
 describe("parseReading", () => {
+  it("should treat a naive recordedAt as SAST so the device clock is preserved", () => {
+    const result = parseReading(TOPIC, {
+      deviceId: "fridge-01",
+      temperatureC: 4.5,
+      humidityPct: 60,
+      recordedAt: "2026-09-06T08:15:00",
+    });
+
+    expect(result._unsafeUnwrap().recordedAt).toBe("2026-09-06T08:15:00+02:00");
+  });
+
   it("should accept a valid object payload", () => {
     const result = parseReading(TOPIC, {
       deviceId: "fridge-01",

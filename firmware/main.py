@@ -33,7 +33,7 @@ import sdlog
 from net import (
     clock_due,
     connect_wifi,
-    iso_utc,
+    iso_sast,
     local_hms,
     local_iso,
     local_time_str,
@@ -56,7 +56,7 @@ LED = machine.Pin("LED", machine.Pin.OUT)
 
 
 def log(*args):
-    # Console stamps are local time (SAST); the payloads themselves stay UTC.
+    # Everything the Pico shows or sends is local time (SAST).
     print("[%s] [%s]" % (local_hms() or "--:--:--", config.DEVICE_ID), *args)
 
 
@@ -378,7 +378,7 @@ def run_storage(uplink):
                 "deviceId": config.DEVICE_ID,
                 "temperatureC": round(temp_c, 1),
                 "humidityPct": round(humidity, 1),
-                "recordedAt": iso_utc(),
+                "recordedAt": iso_sast(),
             }
             topic = "clinic/storage/%s/telemetry" % config.DEVICE_ID
             uplink.send(topic, payload)
@@ -390,7 +390,7 @@ def run_storage(uplink):
             door_payload = {
                 "sensorId": config.DEVICE_ID,
                 "containerOpen": door_open,
-                "recordedAt": iso_utc(),
+                "recordedAt": iso_sast(),
             }
             door_topic = "clinic/sensors/%s/telemetry/door" % config.DEVICE_ID
             uplink.send(door_topic, door_payload)
@@ -417,7 +417,7 @@ def run_climate(uplink):
                 "sensorId": config.SENSOR_ID,
                 "temp": round(temp_c, 1),
                 "humidity": round(humidity, 1),
-                "recordedAt": iso_utc(),
+                "recordedAt": iso_sast(),
             }
             topic = "clinic/sensors/%s/telemetry/climate" % config.SENSOR_ID
             uplink.send(topic, payload)
@@ -446,7 +446,7 @@ def run_door(uplink):
         payload = {
             "sensorId": config.SENSOR_ID,
             "containerOpen": door_open(),
-            "recordedAt": iso_utc(),
+            "recordedAt": iso_sast(),
         }
         uplink.send(topic, payload)
         log("-> %s %s" % (topic, payload))

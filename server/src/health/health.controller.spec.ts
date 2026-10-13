@@ -33,13 +33,13 @@ describe("HealthController", () => {
     expect(check).not.toHaveBeenCalled();
   });
 
-  it("time should return the current UTC time in whole seconds with a Z suffix", () => {
+  it("time should return the current SAST time (UTC+2) in whole seconds", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-04T18:00:15.789Z"));
     try {
       const { controller } = createController();
 
-      expect(controller.time()).toEqual({ utc: "2026-10-04T18:00:15Z" });
+      expect(controller.time()).toEqual({ sast: "2026-10-04T20:00:15+02:00" });
     } finally {
       vi.useRealTimers();
     }

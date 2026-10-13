@@ -7,6 +7,7 @@ import { AppLogger } from "../core/logger/app-logger.service.js";
 import { err, ok, type Result } from "../core/result/result.js";
 import { SensorsService } from "../sensors/sensors.service.js";
 import { SettingsService } from "../settings/settings.service.js";
+import { normalizeDeviceTimestamp } from "../telemetry/reading.js";
 import { ReadingEntity } from "./reading.entity.js";
 
 export interface ClimateSample {
@@ -26,7 +27,7 @@ function validDate(value: unknown): value is string {
 }
 
 function coerceRecordedAt(value: unknown): string {
-  return validDate(value) ? (value as string) : new Date().toISOString();
+  return validDate(value) ? normalizeDeviceTimestamp(value) : new Date().toISOString();
 }
 
 @Injectable()

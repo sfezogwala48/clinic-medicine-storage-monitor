@@ -12,6 +12,9 @@ import {
 } from "@nestjs/terminus";
 import { mqttUrl } from "../mqtt/mqtt.options.js";
 
+/** South African Standard Time is UTC+2 year-round (no DST). */
+const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+
 @ApiTags("health")
 @Controller("health")
 export class HealthController {
@@ -33,15 +36,17 @@ export class HealthController {
   }
 
   /**
-   * Current UTC time for devices that cannot reach NTP (e.g. guest WiFi that
-   * blocks UDP 123). Whole seconds, in the same format devices send as
-   * `recordedAt`.
+   * Current South African time for devices that cannot reach NTP (e.g. guest
+   * WiFi that blocks UDP 123). The RTC on the Pico holds SAST, so it is handed
+   * the local wall-clock directly. Whole seconds, in the same format devices
+   * send as `recordedAt`.
    */
   @Get("time")
-  @ApiOperation({ summary: "Server UTC time, for device clock sync" })
-  @ApiResponse({ status: 200, description: "Current UTC time, e.g. 2026-01-31T12:00:00Z" })
+  @ApiOperation({ summary: "Server SAST time, for device clock sync" })
+  @ApiResponse({ status: 200, description: "Current SAST time, e.g. 2026-01-31T14:00:00+02:00" })
   time() {
-    return { utc: `${new Date().toISOString().slice(0, 19)}Z` };
+    const sast = new Date(Date.now() + SAST_OFFSET_MS).toISOString().slice(0, 19);
+    return { sast: `${sast}+02:00` };
   }
 
   /** Readiness: sqlite, MQTT broker, disk space, and memory can serve traffic. */

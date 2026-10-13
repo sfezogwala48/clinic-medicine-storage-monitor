@@ -26,24 +26,27 @@ ACTUATOR_ID = DEVICE_ID  # used by the buzzer role
 # ---------------------------------------------------------------------------
 # WiFi (Pico W onboard CYW43 radio)
 # ---------------------------------------------------------------------------
-WIFI_SSID = ""
-WIFI_PASSWORD = ""
+WIFI_SSID = "siphosa27"
+WIFI_PASSWORD = "1234567890"
 
 # ---------------------------------------------------------------------------
 # MQTT broker (the NestJS server subscribes here; defaults match compose.yaml)
 # ---------------------------------------------------------------------------
-MQTT_BROKER = ""  # IP of the machine running `server/` (not "localhost"!)
-MQTT_PORT = 1883
-# Server HTTP API used to fetch the real UTC time (GET /health/time). The Pico's
-# clock is lost on every power cycle and NTP is often blocked on guest WiFi.
+MQTT_BROKER = (
+    "junction.proxy.rlwy.net"  # IP of the machine running `server/` (not "localhost"!)
+)
+MQTT_PORT = 19875
+# Server HTTP API used to fetch the real local time (GET /health/time, SAST).
+# The Pico's clock is lost on every power cycle and NTP is often blocked on
+# guest WiFi.
 TIME_API_HOST = MQTT_BROKER  # change if the API runs on a different host
 TIME_API_PORT = 3000
 CLOCK_RESYNC_S = 86400  # re-sync this often once synced
 CLOCK_RETRY_S = 60  # retry this often while unsynced
 
-# The RTC always holds UTC and everything sent to the server is UTC. This
-# offset is only applied to what people read on the device: the OLED, console
-# log stamps and the SD CSV history. South Africa is UTC+2 year-round (no DST).
+# The RTC holds local time and everything sent to the server (recordedAt) is
+# local time. This offset converts NTP's UTC to local and labels the offset on
+# timestamps. South Africa is UTC+2 year-round (no DST).
 LOCAL_UTC_OFFSET_H = 2
 
 MQTT_USER = None  # set to a string if mosquitto requires auth
