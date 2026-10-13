@@ -3,7 +3,8 @@ import { defineRailway, github, preserve, project, service, volume } from "railw
 const REPO = "sfezogwala48/clinic-medicine-storage-monitor";
 
 export default defineRailway(() => {
-  const serverData = volume("server-data");
+  // Match the live volume (iad, 500 MB); omitting these makes `config apply` reset them.
+  const serverData = volume("server-data", { region: "iad", sizeMB: 500 });
 
   // Public MQTT broker for IoT devices. Exposed via TCP proxy on 1883.
   // Devices connect to the generated TCP endpoint (xxx.proxy.rlwy.net:<port>).
@@ -36,6 +37,12 @@ export default defineRailway(() => {
       SEED_ADMIN_PASSWORD: preserve(),
       SEED_SUPERVISOR_PASSWORD: preserve(),
       SEED_STAFF_PASSWORD: preserve(),
+      // EmailJS alert emails. Already set in Railway; preserve() keeps them
+      // (variables missing from this file are deleted on apply).
+      EMAILJS_PUBLIC_KEY: preserve(),
+      EMAILJS_PRIVATE_KEY: preserve(),
+      EMAILJS_SERVICE_ID: preserve(),
+      EMAILJS_TEMPLATE_ID: preserve(),
     },
     volumeMounts: {
       "/app/data": serverData,
