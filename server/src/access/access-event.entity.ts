@@ -1,4 +1,5 @@
 import { Column, Entity, Index, PrimaryColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 /** Door open/close event. `time`/`duration` display strings are derived from occurredAt/durationSec. */
 @Entity("access_events")
@@ -17,7 +18,7 @@ export class AccessEventEntity {
   @Column()
   open!: boolean;
 
-  @Column({ type: "datetime" })
+  @Column({ type: "varchar", transformer: sastDateTime })
   occurredAt!: string;
 
   /** Seconds the container stayed open (open events only, paired on close). */

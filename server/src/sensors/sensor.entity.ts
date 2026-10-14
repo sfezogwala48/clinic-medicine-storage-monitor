@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 export const SENSOR_TYPES = ["Temp/Humidity", "Magnetic Door"] as const;
 export type SensorType = (typeof SENSOR_TYPES)[number];
@@ -28,6 +29,6 @@ export class SensorEntity {
   @Column({ type: "varchar", nullable: true })
   container!: string | null;
 
-  @Column({ type: "datetime", nullable: true })
+  @Column({ type: "varchar", transformer: sastDateTime, nullable: true })
   lastSeenAt!: string | null;
 }

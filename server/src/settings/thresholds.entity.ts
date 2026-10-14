@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 @Entity("thresholds")
 export class ThresholdsEntity {
@@ -26,6 +27,6 @@ export class ThresholdsEntity {
   @Column({ type: "float", default: 10 })
   doorOpenLimitSec!: number;
 
-  @Column({ type: "datetime" })
+  @Column({ type: "varchar", transformer: sastDateTime })
   updatedAt!: string;
 }

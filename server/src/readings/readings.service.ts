@@ -5,6 +5,7 @@ import { AccessService } from "../access/access.service.js";
 import { AlertsService } from "../alerts/alerts.service.js";
 import { AppLogger } from "../core/logger/app-logger.service.js";
 import { err, ok, type Result } from "../core/result/result.js";
+import { nowSast } from "../core/time/sast.js";
 import { SensorsService } from "../sensors/sensors.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import { normalizeDeviceTimestamp } from "../telemetry/reading.js";
@@ -27,7 +28,9 @@ function validDate(value: unknown): value is string {
 }
 
 function coerceRecordedAt(value: unknown): string {
-  return validDate(value) ? normalizeDeviceTimestamp(value) : new Date().toISOString();
+  // No/invalid device timestamp: fall back to clinic-local server time so the
+  // stored value matches what devices put in recordedAt (SAST, not UTC).
+  return validDate(value) ? normalizeDeviceTimestamp(value) : nowSast();
 }
 
 @Injectable()
@@ -79,7 +82,7 @@ export class ReadingsService {
       humidity: input.humidity,
       containerOpen: null,
       recordedAt,
-      receivedAt: new Date().toISOString(),
+      receivedAt: nowSast(),
     });
     this.logger.log(
       `device=${sensorId} temp=${input.temp}C humidity=${input.humidity}%`,
@@ -119,7 +122,7 @@ export class ReadingsService {
       humidity: null,
       containerOpen: input.containerOpen,
       recordedAt,
-      receivedAt: new Date().toISOString(),
+      receivedAt: nowSast(),
     });
     await this.access.recordDoor(sensorId, input.containerOpen, recordedAt);
     return ok(reading);

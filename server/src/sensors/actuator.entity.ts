@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 /**
  * Physical acting device (buzzer/siren). Deliberately separate from sensors:
@@ -19,6 +20,6 @@ export class ActuatorEntity {
   @Column({ type: "varchar", default: "Active" })
   status!: string;
 
-  @Column({ type: "datetime", nullable: true })
+  @Column({ type: "varchar", transformer: sastDateTime, nullable: true })
   lastSeenAt!: string | null;
 }

@@ -11,9 +11,7 @@ import {
   TypeOrmHealthIndicator,
 } from "@nestjs/terminus";
 import { mqttUrl } from "../mqtt/mqtt.options.js";
-
-/** South African Standard Time is UTC+2 year-round (no DST). */
-const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+import { SAST_OFFSET, nowSast } from "../core/time/sast.js";
 
 @ApiTags("health")
 @Controller("health")
@@ -45,8 +43,7 @@ export class HealthController {
   @ApiOperation({ summary: "Server SAST time, for device clock sync" })
   @ApiResponse({ status: 200, description: "Current SAST time, e.g. 2026-01-31T14:00:00+02:00" })
   time() {
-    const sast = new Date(Date.now() + SAST_OFFSET_MS).toISOString().slice(0, 19);
-    return { sast: `${sast}+02:00` };
+    return { sast: `${nowSast().slice(0, 19)}${SAST_OFFSET}` };
   }
 
   /** Readiness: sqlite, MQTT broker, disk space, and memory can serve traffic. */

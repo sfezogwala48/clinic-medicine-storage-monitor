@@ -1,4 +1,5 @@
 import { Column, Entity, Index, PrimaryGeneratedColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 /** One persisted device sample. Climate rows set temp/humidity; door rows set containerOpen. */
 @Entity("readings")
@@ -20,9 +21,9 @@ export class ReadingEntity {
   @Column({ type: "boolean", nullable: true })
   containerOpen!: boolean | null;
 
-  @Column({ type: "datetime" })
+  @Column({ type: "varchar", transformer: sastDateTime })
   recordedAt!: string;
 
-  @Column({ type: "datetime" })
+  @Column({ type: "varchar", transformer: sastDateTime })
   receivedAt!: string;
 }

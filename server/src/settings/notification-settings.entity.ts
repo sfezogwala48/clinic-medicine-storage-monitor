@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 @Entity("notification_settings")
 export class NotificationSettingsEntity {
@@ -14,6 +15,6 @@ export class NotificationSettingsEntity {
   @Column({ type: "simple-json" })
   recipients!: string[];
 
-  @Column({ type: "datetime" })
+  @Column({ type: "varchar", transformer: sastDateTime })
   updatedAt!: string;
 }

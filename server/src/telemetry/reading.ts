@@ -1,3 +1,4 @@
+import { SAST_OFFSET, nowSast } from "../core/time/sast.js";
 import { err, ok, safeCall, type Result } from "../core/result/result.js";
 
 export interface StorageReading {
@@ -9,9 +10,6 @@ export interface StorageReading {
 
 const DEVICE_TOPIC_PREFIX = "clinic/storage/";
 const DEVICE_TOPIC_SUFFIX = "/telemetry";
-
-/** Clinic local zone: South African Standard Time (UTC+2, no DST). */
-export const CLINIC_UTC_OFFSET = "+02:00";
 
 const EXPLICIT_ZONE = /(?:z|[+-]\d{2}:?\d{2})$/i;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,8 +23,8 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 export function normalizeDeviceTimestamp(value: string): string {
   const trimmed = value.trim();
   if (EXPLICIT_ZONE.test(trimmed)) return trimmed;
-  if (DATE_ONLY.test(trimmed)) return `${trimmed}T00:00:00${CLINIC_UTC_OFFSET}`;
-  return `${trimmed.replace(" ", "T")}${CLINIC_UTC_OFFSET}`;
+  if (DATE_ONLY.test(trimmed)) return `${trimmed}T00:00:00${SAST_OFFSET}`;
+  return `${trimmed.replace(" ", "T")}${SAST_OFFSET}`;
 }
 
 /** Extract the device id from a topic like clinic/storage/<deviceId>/telemetry. */
@@ -85,9 +83,7 @@ export function parseReading(topic: string, payload: unknown): Result<StorageRea
       return err(new Error(`humidityPct ${data.humidityPct} out of range (0..100)`));
     }
     const recordedAt =
-      typeof data.recordedAt === "string"
-        ? normalizeDeviceTimestamp(data.recordedAt)
-        : new Date().toISOString();
+      typeof data.recordedAt === "string" ? normalizeDeviceTimestamp(data.recordedAt) : nowSast();
     if (Number.isNaN(Date.parse(recordedAt))) {
       return err(new Error(`recordedAt "${recordedAt}" is not a valid date`));
     }

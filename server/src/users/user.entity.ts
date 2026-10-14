@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 export const ROLES = ["admin", "supervisor", "staff"] as const;
 export type Role = (typeof ROLES)[number];
@@ -23,6 +24,6 @@ export class UserEntity {
   @Column({ type: "varchar", nullable: true })
   passwordHash!: string | null;
 
-  @Column({ type: "datetime", nullable: true })
+  @Column({ type: "varchar", transformer: sastDateTime, nullable: true })
   lastLoginAt!: string | null;
 }

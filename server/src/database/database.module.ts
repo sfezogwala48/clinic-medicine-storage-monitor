@@ -1,9 +1,11 @@
-import { Module } from "@nestjs/common";
+import { Injectable, Module, type OnApplicationBootstrap } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule, type TypeOrmModuleOptions } from "@nestjs/typeorm";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { DataSource } from "typeorm";
 import { safeCall } from "../core/result/result.js";
+import { sastDateTime } from "../core/time/sast.js";
 
 interface PragmaDb {
   pragma: (statement: string) => unknown;
@@ -15,6 +17,33 @@ function ensureParentDir(database: string): void {
     return;
   }
   safeCall(() => mkdirSync(dirname(resolve(database)), { recursive: true }));
+}
+
+/**
+ * One-off, idempotent: rewrite legacy UTC wall-clock datetimes (written by the
+ * sqlite driver before columns became SAST text) as SAST ISO strings so the
+ * whole database uses a single, sortable convention.
+ */
+@Injectable()
+class SastBackfill implements OnApplicationBootstrap {
+  constructor(private readonly dataSource: DataSource) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    for (const meta of this.dataSource.entityMetadatas) {
+      for (const column of meta.columns) {
+        if (column.transformer !== sastDateTime) {
+          continue;
+        }
+        const table = `"${meta.tableName}"`;
+        const col = `"${column.databaseName}"`;
+        await this.dataSource.query(
+          `UPDATE ${table} SET ${col} = strftime('%Y-%m-%dT%H:%M:%f', ${col}, '+2 hours') || '+02:00' ` +
+            `WHERE ${col} IS NOT NULL AND ${col} NOT LIKE '%+02:00' ` +
+            `AND strftime('%Y-%m-%dT%H:%M:%f', ${col}) IS NOT NULL`,
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -48,5 +77,6 @@ function ensureParentDir(database: string): void {
       },
     }),
   ],
+  providers: [SastBackfill],
 })
 export class DatabaseModule {}

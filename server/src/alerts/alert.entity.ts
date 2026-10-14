@@ -1,4 +1,5 @@
 import { Column, Entity, Index, PrimaryColumn } from "typeorm";
+import { sastDateTime } from "../core/time/sast.js";
 
 export const ALERT_SEVERITIES = ["Critical", "High", "Medium"] as const;
 export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];
@@ -28,9 +29,9 @@ export class AlertEntity {
   @Column({ type: "varchar", default: "Active" })
   status!: AlertStatus;
 
-  @Column({ type: "datetime" })
+  @Column({ type: "varchar", transformer: sastDateTime })
   occurredAt!: string;
 
-  @Column({ type: "datetime", nullable: true })
+  @Column({ type: "varchar", transformer: sastDateTime, nullable: true })
   resolvedAt!: string | null;
 }
